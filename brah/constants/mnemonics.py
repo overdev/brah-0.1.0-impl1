@@ -57,6 +57,8 @@ __all__ = [
     'NE',
     'GTE',
     'GT',
+    'INC',
+    'DEC',
     'IRQ',
 ]
 
@@ -119,6 +121,8 @@ class Opcode(IntEnum):
     NE = auto()
     GTE = auto()
     GT = auto()
+    INC = auto()
+    DEC = auto()
     IRQ = auto()
 
 
@@ -176,6 +180,8 @@ EQ = Opcode.EQ
 NE = Opcode.NE
 GTE = Opcode.GTE
 GT = Opcode.GT
+INC = Opcode.INC
+DEC = Opcode.DEC
 IRQ = Opcode.IRQ
 
 OPCODES = [name for name in Opcode.__members__]

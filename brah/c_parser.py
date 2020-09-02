@@ -1,3 +1,4 @@
+import random
 from typing import Optional, Any, List, Dict, NamedTuple, Tuple, Union
 from brah.constants.tokens import *
 from brah.constants.nodes import *
@@ -211,6 +212,7 @@ class StmtNode(ASTNode):
     def __init__(self, kind: NodeKind, **kwargs):
         super(StmtNode, self).__init__(kind, **kwargs)
         self.nodes: Dict[str, ExprNode] = kwargs.copy()
+        self.label: Optional[str] = kwargs.get('label')
 
     def __getitem__(self, key) -> Union['ExprNode', 'DeclNode', 'ScopeNode']:
         return self.nodes.__getitem__(key)
@@ -248,7 +250,12 @@ class ScopeNode(ASTNode):
         self.parent: Optional[ScopeNode] = parent
         self.locals: Dict[str, DeclNode] = {}
         self.code: List[Union[StmtNode, DeclNode]] = []
+        self.loopcounters: List[StmtNode] = []
+        self.iteration: Dict[str, str] = {}
         self.offset: int = 0
+        self.jump_labels: Dict[str, int] = {}
+        self.default_labels: Dict[str, str] = {}
+        self.initializers: List[DeclNode] = []
 
     @property
     def in_function_scope(self) -> bool:
@@ -264,29 +271,70 @@ class ScopeNode(ASTNode):
 
     @property
     def base_scope(self) -> Optional['ScopeNode']:
-        if self.kind is NK_STATEMENT_SCOPE:
+        if self.kind in (NK_STATEMENT_SCOPE, NK_LOOP_SCOPE, NK_CASE_SCOPE):
             assert self.parent is not None, "Fatal Error: STATEMENT_SCOPE not parented by another scope"
             return self.parent.base_scope
         else:
             return self
 
-    def find_scope(self, kind: NodeKind) -> Optional['ScopeNode']:
-        if self.kind is kind:
-            return self
+    def set_iteration(self, **kwargs):
+        self.iteration.update(kwargs)
+
+    def auto_define_label(self, prefix: str) -> str:
+        if prefix in self.jump_labels:
+            self.jump_labels[prefix] += 1
+            return f"{prefix}{self.jump_labels[prefix]}"
+        else:
+            self.jump_labels[prefix] = 0
+            return prefix
+
+    def define_label(self, label: str) -> bool:
+        if label in self.jump_labels:
+            return False
+        self.jump_labels[label] = 0
+        return True
+
+    def has_label(self, label: str) -> bool:
+        return label in self.jump_labels
+
+    def set_label(self, stmt_kw: str, label: str):
+        self.default_labels[stmt_kw] = label
+
+    def get_label(self, stmt_kw: str) -> Optional[str]:
+        if self.kind in (NK_CASE_SCOPE, NK_LOOP_SCOPE):
+            if stmt_kw in self.default_labels:
+                return self.default_labels[stmt_kw]
+            else:
+                return self.parent.get_label(stmt_kw)
         elif self.parent:
-            return self.parent.find_scope(kind)
+            return self.parent.get_label(stmt_kw)
         else:
             return None
 
-    def declare(self, name: str, node: DeclNode) -> bool:
+    def find_scope(self, *kinds: NodeKind) -> Optional['ScopeNode']:
+        if self.kind in kinds:
+            return self
+        elif self.parent:
+            return self.parent.find_scope(*kinds)
+        else:
+            return None
+
+    @staticmethod
+    def gen_name(prefix: str) -> str:
+        return f"__{prefix}_{hex(random.randint(100000, 999999))[2:]}"
+
+    def declare(self, name: str, node: DeclNode, *expected_scopes: NodeKind) -> bool:
         if name in self.locals:
             return False
 
         self.locals[name] = node
-        base = self.base_scope
+        base = self.find_scope(*expected_scopes)
+        scopes = ", nor outside of ".join(n.name for n in expected_scopes)
+        assert base, f"Can't declare {node.kind.name} outside of {scopes} scope."
         node.offset = base.offset
         node.scope = self
         base.offset += 1
+        base.initializers.append(node)
         return True
 
     def find(self, name: str) -> Optional['DeclNode']:
@@ -392,11 +440,38 @@ class Parser:
                 assert scope.parent is None, "Functions must be declared on top-level scope."
                 scope.code.append(self.parse_decl_function(scope, stream))
 
-            elif stream.is_some_keyword(KW_IF, KW_PRINT, KW_RETURN):
-                scope.code.append(self.parse_stmt(scope, stream))
+            elif stream.is_keyword(KW_IF):
+                scope.code.append(self.parse_stmt_if(scope, stream))
+
+            elif stream.is_keyword(KW_WHILE):
+                scope.code.append(self.parse_stmt_while(scope, stream))
+
+            elif stream.is_keyword(KW_DO):
+                scope.code.append(self.parse_stmt_do(scope, stream))
+
+            elif stream.is_keyword(KW_REPEAT):
+                scope.code.append(self.parse_stmt_repeat(scope, stream))
+
+            elif stream.is_keyword(KW_PRINT):
+                scope.code.append(self.parse_stmt_print(scope, stream))
+
+            elif stream.is_keyword(KW_RETURN):
+                assert scope.find_scope(NK_FUNCTION_SCOPE), "Return statement is ouside of function."
+                scope.code.append(self.parse_stmt_return(scope, stream))
+
+            elif stream.is_keyword(KW_BREAK):
+                assert scope.find_scope(NK_LOOP_SCOPE, NK_CASE_SCOPE), "Return statement is ouside of function."
+                scope.code.append(self.parse_stmt_break(scope, stream))
+
+            elif stream.is_keyword(KW_CONTINUE):
+                assert scope.find_scope(NK_LOOP_SCOPE, NK_CASE_SCOPE), "Return statement is ouside of function."
+                scope.code.append(self.parse_stmt_continue(scope, stream))
 
             elif stream.is_token(TT_NAME):
                 scope.code.append(self.parse_stmt_assign(scope, stream))
+
+            elif stream.is_any_operator(OP_INC, OP_DEC):
+                scope.code.append(self.parse_stmt_incr(scope, stream))
 
             else:
                 return
@@ -460,6 +535,11 @@ class Parser:
             nargs = len(args)
             assert nparams == nargs, f"'{name}' function expects {nparams} arguments, but {nargs} were passed."
             return ExprNode(NK_FCALL_EXPR, args=args, argc=nargs, decl=decl)
+        elif stream.is_any_operator(OP_INC, OP_DEC):
+            assert expr.kind not in (NK_INT32_EXPR, NK_INT64_EXPR), "Literal increment or decrement makes no sense."
+            op = stream.get_val()
+            kind = NK_INC_EXPR if op == OP_INC else NK_DEC_EXPR
+            return ExprNode(kind, pre=False, operand=expr)
         return expr
 
     def parse_expr_arguments(self, scope: ScopeNode, stream: TokenStream) -> List[ExprNode]:
@@ -489,9 +569,14 @@ class Parser:
         :param stream: the source stream of tokens.
         :returns: the expression node.
         """
-        op = stream.token_val
-        if stream.match_token(TT_PLUS, TT_MINUS):
-            return ExprNode(NK_UNARY_EXPR, op=op, operand=self.parse_expr_base(scope, stream))
+        if stream.is_any_operator(OP_ADD, OP_SUB, OP_INC, OP_DEC):
+            op = stream.get_val()
+            if op in (OP_ADD, OP_SUB):
+                return ExprNode(NK_UNARY_EXPR, op=op, operand=self.parse_expr_base(scope, stream))
+            elif op in (OP_INC, OP_DEC):
+                kind = NK_INC_EXPR if op == OP_INC else NK_DEC_EXPR
+                expr = self.parse_expr_base(scope, stream)
+                return ExprNode(kind, pre=True, operand=expr)
         else:
             return self.parse_expr_base(scope, stream)
 
@@ -538,7 +623,7 @@ class Parser:
         """
         expr = self.parse_expr_add(scope, stream)
         op = stream.token_val
-        while stream.match_some_operator(OP_EQ, OP_NE, OP_LT, OP_LE, OP_GE, OP_GT):
+        while stream.match_any_operator(OP_EQ, OP_NE, OP_LT, OP_LE, OP_GE, OP_GT):
             other = self.parse_expr_add(scope, stream)
             expr = ExprNode(NK_COMPARISON_EXPR, op=op, left=expr, right=other)
 
@@ -650,7 +735,7 @@ class Parser:
             expr = ExprNode(NK_UNDEFINED_EXPR)
         decl.initializer = expr
         stream.expect(TT_SEMI)
-        assert scope.declare(name, decl), f"{name} already declared."
+        assert scope.declare(name, decl, NK_FUNCTION_SCOPE, NK_METHOD_SCOPE), f"{name} already declared."
 
         return decl
 
@@ -664,7 +749,7 @@ class Parser:
         stream.expect_keyword(KW_FUNCTION)
         name = self.parse_name(stream)
         decl = DeclNode(NK_FUNCTION_DECL, name)
-        assert scope.declare(name, decl), f"{name} already declared."
+        assert scope.declare(name, decl, NK_MODULE_SCOPE), f"{name} already declared."
         fscope: ScopeNode = ScopeNode(NK_FUNCTION_SCOPE, scope)
         decl.params = self.parse_decl_params(fscope, stream)
         decl.is_main = name == SW_MAINFUNCTION
@@ -672,6 +757,8 @@ class Parser:
         stream.expect(TT_LBRACE)
         self.parse_scope(fscope, stream)
         stream.expect(TT_RBRACE)
+
+        fscope.jump_labels.clear()
 
         return decl
 
@@ -707,7 +794,7 @@ class Parser:
         """
         name = self.parse_name(stream)
         decl = DeclNode(NK_PARAM_DECL, name)
-        assert scope.declare(name, decl), f"{name} already declared."
+        assert scope.declare(name, decl, NK_FUNCTION_SCOPE), f"{name} already declared."
         return decl
 
     def parse_stmt(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
@@ -752,8 +839,130 @@ class Parser:
         else:
             return StmtNode(NK_IF_THEN_STMT, expr=expr, thenscope=thenscope)
 
+    def parse_stmt_while(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
+        """Parses a `while` statement.
+
+        :param scope: the current scope being parsed.
+        :param stream: the source stream of tokens.
+        :returns: the statement node.
+        """
+        funcscope: ScopeNode = scope.find_scope(NK_FUNCTION_SCOPE)
+        stream.expect_keyword(KW_WHILE)
+        expr = self.parse_paren_expr(scope, stream)
+        whilescope: ScopeNode = ScopeNode(NK_LOOP_SCOPE, scope)
+        label: str = scope.auto_define_label('.enqu')
+        if stream.match(TT_COLON):
+            label = self.parse_name(stream)
+            assert funcscope.define_label(label), f"'{label}' label already declared in this definition"
+        funcscope.define_label(label)
+        whilescope.set_label(KW_BREAK, label)
+        whilescope.set_label(KW_CONTINUE, label)
+        stream.expect(TT_LBRACE)
+        self.parse_scope(whilescope, stream)
+        stream.expect(TT_RBRACE)
+        return StmtNode(NK_WHILE_STMT, label=label, expr=expr, whilescope=whilescope)
+
+    def parse_stmt_do(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
+        """Parses a `do` statement.
+
+        :param scope: the current scope being parsed.
+        :param stream: the source stream of tokens.
+        :returns: the statement node.
+        """
+        funcscope: ScopeNode = scope.find_scope(NK_FUNCTION_SCOPE)
+        stream.expect_keyword(KW_DO)
+        doscope: ScopeNode = ScopeNode(NK_LOOP_SCOPE, scope)
+        label: str = scope.auto_define_label('.faca')
+        if stream.match(TT_COLON):
+            label = self.parse_name(stream)
+            assert funcscope.define_label(label), f"'{label}' label already declared in this definition"
+        funcscope.define_label(label)
+        doscope.set_label(KW_BREAK, label)
+        doscope.set_label(KW_CONTINUE, label)
+        stream.expect(TT_LBRACE)
+        self.parse_scope(doscope, stream)
+        stream.expect(TT_RBRACE)
+        kind = NK_DO_WHILE_STMT
+        if not stream.match_keyword(KW_WHILE):
+            kind = NK_DO_UNTIL_STMT
+            stream.expect_keyword(KW_UNTIL)
+        expr = self.parse_paren_expr(scope, stream)
+        return StmtNode(kind, label=label, expr=expr, doscope=doscope)
+
+    def parse_stmt_repeat(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
+        """Parses a `repeat` statement.
+
+        :param scope: the current scope being parsed.
+        :param stream: the source stream of tokens.
+        :returns: the statement node.
+        """
+        funcscope: ScopeNode = scope.find_scope(NK_FUNCTION_SCOPE)
+        stream.expect_keyword(KW_REPEAT)
+        repeatscope: ScopeNode = ScopeNode(NK_LOOP_SCOPE, scope)
+        if stream.is_token(TT_LPAREN):
+            counter_max = scope.gen_name('max')
+            counter_idx = scope.gen_name('idx')
+            decl_max = DeclNode(NK_VAR_DECL, counter_max)
+            decl_idx = DeclNode(NK_VAR_DECL, counter_idx)
+            assert repeatscope.declare(counter_max, decl_max, NK_METHOD_SCOPE, NK_FUNCTION_SCOPE)
+            assert repeatscope.declare(counter_idx, decl_idx, NK_METHOD_SCOPE, NK_FUNCTION_SCOPE)
+            repeatscope.set_iteration(start=counter_idx, stop=counter_max)
+            decl_max.initializer = self.parse_paren_expr(scope, stream)
+            decl_idx.initializer = ExprNode(NK_INT32_EXPR, value='0')
+            repeatscope.code.extend((decl_max, decl_idx))
+            kind = NK_REPEAT_FINITE_STMT
+        else:
+            # expr = ExprNode(NK_UNDEFINED_EXPR)
+            kind = NK_REPEAT_INFINITE_STMT
+        label: str = scope.auto_define_label('.rept')
+        if stream.match(TT_COLON):
+            label = self.parse_name(stream)
+            assert funcscope.define_label(label), f"'{label}' label already declared in this definition"
+        else:
+            funcscope.auto_define_label(label)
+        repeatscope.set_label(KW_BREAK, label)
+        repeatscope.set_label(KW_CONTINUE, label)
+        stream.expect(TT_LBRACE)
+        self.parse_scope(repeatscope, stream)
+        stream.expect(TT_RBRACE)
+        return StmtNode(kind, label=label, repeatscope=repeatscope)
+
+    def parse_stmt_break(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
+        """Parses a `break` statement.
+
+        :param scope: the current scope being parsed.
+        :param stream: the source stream of tokens.
+        :returns: the statement node.
+        """
+        assert scope.find_scope(NK_LOOP_SCOPE, NK_CASE_SCOPE), "Invalid statement."
+        funcscope: ScopeNode = scope.find_scope(NK_FUNCTION_SCOPE)
+        stream.expect_keyword(KW_BREAK)
+        label: Optional[str] = scope.get_label(KW_BREAK)
+        if not stream.match(TT_SEMI):
+            label = self.parse_name(stream)
+            assert funcscope.has_label(label), f"'{label}' label is not declared in this definition"
+            stream.expect(TT_SEMI)
+        return StmtNode(NK_BREAK_STMT, label=label)
+
+    def parse_stmt_continue(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
+        """Parses a `continue` statement.
+
+        :param scope: the current scope being parsed.
+        :param stream: the source stream of tokens.
+        :returns: the statement node.
+        """
+        assert scope.find_scope(NK_LOOP_SCOPE), "Invalid statement."
+        funcscope: ScopeNode = scope.find_scope(NK_FUNCTION_SCOPE)
+        stream.expect_keyword(KW_CONTINUE)
+        label: Optional[str] = scope.get_label(KW_CONTINUE)
+        if not stream.match(TT_SEMI):
+            label = self.parse_name(stream)
+            assert funcscope.has_label(label), f"'{label}' label is not declared in this definition"
+            stream.expect(TT_SEMI)
+        return StmtNode(NK_CONTINUE_STMT, label=label)
+
     def parse_stmt_print(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
-        """Parses a print statement.
+        """Parses a `print` statement.
 
         :param scope: the current scope being parsed.
         :param stream: the source stream of tokens.
@@ -765,7 +974,7 @@ class Parser:
         return StmtNode(NK_PRINT_STMT, expr=expr)
 
     def parse_stmt_return(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
-        """Parses a return statement.
+        """Parses a `return` statement.
 
         :param scope: the current scope being parsed.
         :param stream: the source stream of tokens.
@@ -798,13 +1007,27 @@ class Parser:
             assert nparams == nargs, f"'{name}' function expects {nparams} arguments, but {nargs} were passed."
             stmt = ExprNode(NK_FCALL_EXPR, args=args, argc=nargs, decl=decl)
         else:
-            assert stream.match_token(TT_EQUAL), "Invalid statement"
-            decl.write()
-            expr = self.parse_expr(scope, stream)
-            stmt = StmtNode(NK_ASSIGN_STMT, decl=decl, expr=expr)
+            if stream.match_token(TT_EQUAL):
+                decl.write()
+                expr = self.parse_expr(scope, stream)
+                stmt = StmtNode(NK_ASSIGN_STMT, decl=decl, expr=expr)
+            elif stream.is_any_operator(OP_INC, OP_DEC):
+                op: str = stream.get_val()
+                kind = NK_INC_STMT if op == OP_INC else NK_DEC_STMT
+                stmt = StmtNode(kind, decl=decl)
+            else:
+                assert False, "Invalid statement"
+
         stream.expect(TT_SEMI)
         return stmt
 
+    def parse_stmt_incr(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
+        op: str = stream.get_val()
+        expr = self.parse_expr_base(scope, stream)
+        kind = NK_INC_STMT if op == OP_INC else NK_DEC_STMT
+
+        stream.expect(TT_SEMI)
+        return StmtNode(kind, op=op, expr=expr)
 
 # endregion (classes)
 # ---------------------------------------------------------

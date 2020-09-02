@@ -5,6 +5,8 @@ __all__ = [
     'SK_MODULE',
     'SK_STATEMENT',
     'SK_FUNCTION',
+    'SK_LOOP',
+    'SK_CASE',
 ]
 
 # ---------------------------------------------------------
@@ -13,14 +15,17 @@ __all__ = [
 
 class ScopeKind(IntEnum):
     MODULE = 0
-    STATEMENT = auto()
     FUNCTION = auto()
+    STATEMENT = auto()
+    LOOP = auto()
+    CASE = auto()
 
 
 SK_MODULE = ScopeKind.MODULE
-SK_STATEMENT = ScopeKind.STATEMENT
 SK_FUNCTION = ScopeKind.FUNCTION
-
+SK_STATEMENT = ScopeKind.STATEMENT
+SK_LOOP = ScopeKind.LOOP
+SK_CASE = ScopeKind.CASE
 
 # endregion (constants)
 # ---------------------------------------------------------

@@ -30,6 +30,15 @@ __all__ = [
     'KW_XOR',
     'KW_NOT',
     'KW_IS',
+    'KW_WHILE',
+    'KW_DO',
+    'KW_UNTIL',
+    'KW_FOR',
+    'KW_IN',
+    'KW_OF',
+    'KW_REPEAT',
+    'KW_CONTINUE',
+    'KW_BREAK',
 
     'TT_NAME',
     'TT_KW',
@@ -71,6 +80,11 @@ __all__ = [
     'OP_MUL',
     'OP_MOD',
     'OP_TER',
+    'OP_INC',
+    'OP_DEC',
+
+    'KEYWORDS',
+    'OPERATORS',
 ]
 
 # ---------------------------------------------------------
@@ -89,6 +103,17 @@ KW_OR = "ou"
 KW_XOR = "oux"
 KW_NOT = "not"
 KW_IS = "é"
+KW_WHILE = "enquanto"
+KW_DO = "faça"
+KW_UNTIL = "até"
+KW_FOR = "para"
+KW_IN = "em"
+KW_OF = "de"
+KW_REPEAT = "repita"
+KW_CONTINUE = "continue"
+KW_BREAK = "pare"
+
+KEYWORDS = [name for name in globals() if name.startswith('KW_')]
 
 TT_NAME = "NAME"
 TT_KW = "KEYWORD"
@@ -130,7 +155,10 @@ OP_DIV = "/"
 OP_MUL = "*"
 OP_MOD = "%"
 OP_TER = "?"
+OP_INC = "++"
+OP_DEC = "--"
 
+OPERATORS = [name for name in globals() if name.startswith('OP_')]
 
 #
 # class TokenKind(Enum):

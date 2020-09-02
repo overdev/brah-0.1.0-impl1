@@ -117,6 +117,21 @@ class TokenStream:
 
         return self.token
 
+    def get_val(self) -> str:
+        val = self.token_val
+        self.next()
+        return val
+
+    def get_kind(self) -> str:
+        val = self.token.kind
+        self.next()
+        return val
+
+    def get(self) -> Tkn:
+        val = self.token
+        self.next()
+        return val
+
     def is_token(self, *token_kinds: str) -> bool:
         """Returns whether the current token kind is one of the given kinds.
         
@@ -148,6 +163,28 @@ class TokenStream:
         :return: True if the token value matches any keyword, False otherwise.
         """
         return self.token.kind == TT_NAME and self.token_val in keywords
+
+    def is_any_operator(self, *operators: str) -> bool:
+        """Returns whether the current token value matches one of the strings.
+
+        :param operators: the strings representing the keywords.
+        :return: True if the token value matches any keyword, False otherwise.
+        """
+        return self.token_val in operators
+
+    def match(self, token_value: str) -> bool:
+        """Returns whether the current token value matches the given value.
+
+        If the current token matches, the stream advances to the next.
+
+        :param token_value: the token value to match against.
+        :returns: True if the token is of given kind, False otherwise.
+        """
+        if self.token.kind == token_value:
+            self.next()
+            return True
+        else:
+            return False
 
     def match_token(self, *token_kinds: str) -> bool:
         """Returns whether the current token kind is one of the given kinds.
@@ -191,7 +228,7 @@ class TokenStream:
         else:
             return False
 
-    def match_some_operator(self, *operators: str) -> bool:
+    def match_any_operator(self, *operators: str) -> bool:
         """Returns whether the current token kind is one of the given operator.
 
         If the current token value matches, the stream advances to the next.

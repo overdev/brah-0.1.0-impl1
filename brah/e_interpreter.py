@@ -42,7 +42,7 @@ class Interpreter:
         self.program = compiler.bin
 
     def execute(self) -> float:
-        return 0.0
+        # return 0.0
         prog_start = timer()
 
         code: List[int] = self.program.copy()
@@ -52,6 +52,11 @@ class Interpreter:
         ip: int = 0
         sp: int = -1
         fp: int = 0
+
+        zf: bool = False
+        sf: bool = False
+
+        op_name = ''
 
         while True:
             opcode = code[ip]
@@ -68,6 +73,7 @@ class Interpreter:
                 ip += 1
                 if syscall == 1:
                     print(stack[sp])
+                    sp -= 1
             elif opcode == CONST_D:
                 # get a immediate operand and increase IP
                 sp += 1
@@ -83,13 +89,25 @@ class Interpreter:
             elif opcode == SET:
                 # pop top to auto var
                 stack[fp + code[ip]] = stack[sp]
+                sp -= 1
+                ip += 1
+
+            elif opcode == INC:
+                addr = fp + code[ip]
+                value = stack[addr]
+                stack[addr] = value + 1
+                ip += 1
+
+            elif opcode == DEC:
+                stack[fp + code[ip]] -= 1
                 ip += 1
 
             elif opcode in (ADD, SUB, MUL, DIV, MOD):
                 l_op = stack[sp]
                 sp -= 1
                 r_op = stack[sp]
-                # skip last pointer decrement, due to increment right after
+                sp -= 1
+                sp += 1
                 if opcode == ADD:
                     stack[sp] = l_op + r_op
                 elif opcode == SUB:
@@ -100,6 +118,36 @@ class Interpreter:
                     stack[sp] = l_op // r_op
                 else:  # opcode == MOD:
                     stack[sp] = l_op % r_op
+
+            elif opcode in (EQ, NE, LT, LTE, GT, GTE):
+                l_op = stack[sp]
+                sp -= 1
+                r_op = stack[sp]
+                # skip last pointer decrement, due to increment right after
+                if opcode == EQ:
+                    stack[sp] = int(l_op == r_op)
+                elif opcode == NE:
+                    stack[sp] = int(l_op != r_op)
+                elif opcode == LT:
+                    stack[sp] = int(l_op < r_op)
+                elif opcode == LTE:
+                    stack[sp] = int(l_op <= r_op)
+                elif opcode == GT:
+                    stack[sp] = int(l_op > r_op)
+                else:  # opcode == GTE:
+                    stack[sp] = int(l_op >= r_op)
+
+            elif opcode in (JZ, JNZ):
+                cmp = stack[sp]
+                sp -= 1
+                addr = code[ip]
+                ip += 1
+                if opcode == JZ:
+                    if not cmp:
+                        ip = addr
+                else:  # opcode == JNZ:
+                    if cmp:
+                        ip = addr
 
             elif opcode == CALL:
                 # save the function pointer
@@ -123,7 +171,8 @@ class Interpreter:
             elif opcode == RET:
                 # save the return value
                 ret = stack[sp]
-                sp -= 1
+                # clear the frame stack
+                sp = fp + 2
                 # pop the frame pointer
                 fp = stack[sp]
                 sp -= 1
@@ -139,6 +188,7 @@ class Interpreter:
 
             elif opcode == JMP:
                 ip = code[ip]
+                # sp -= 1
 
         time = timer() - prog_start
         return time

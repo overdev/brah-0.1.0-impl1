@@ -1,28 +1,23 @@
-função add(a, b) {
-    retorne a + b;
-}
 
-função sub(a, b) {
-    retorne a - b;
-}
-
-função brah(a, b, c, d) {
-    retorne add(a, b) + sub(c, d);
-}
-
-função fatorial(x) {
-    se (x == 1) {
-        retorne 1;
-    } senão {
-        retorne fatorial(x - 1);
+função potência(x, n) {
+    repita (n - 1) {
+        x = x * x;
     }
+    retorne x;
 }
 
-função fatorial2(n) {
-    retorne n < 2 ? 1 : n * fatorial(n - 1);
+
+função hipotenusa(x, y) {
+    var n = 2;
+    retorne potência(x, n) + potência(y, n);
 }
 
 
 função principal() {
-    escreva brah(70, 30, add(21, 79), 100);
+    var x = 2;
+    var y = 3;
+
+    escreva hipotenusa(x, y);
+
+    retorne 0;
 }
