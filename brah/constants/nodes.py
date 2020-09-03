@@ -7,6 +7,14 @@ __all__ = [
     'NK_INT16_EXPR',
     'NK_INT32_EXPR',
     'NK_INT64_EXPR',
+    'NK_UINT8_EXPR',
+    'NK_UINT16_EXPR',
+    'NK_UINT32_EXPR',
+    'NK_UINT64_EXPR',
+    'NK_FLOAT16_EXPR',
+    'NK_FLOAT32_EXPR',
+    'NK_FLOAT64_EXPR',
+    'NK_FLOAT80_EXPR',
     'NK_NULL_EXPR',
     'NK_UNDEFINED_EXPR',
     'NK_FUNCTION_EXPR',
@@ -54,7 +62,18 @@ __all__ = [
     'NK_STATEMENT_SCOPE',
     'NK_LOOP_SCOPE',
     'NK_CASE_SCOPE',
+    'NK_PRIMITIVE_TYPE',
+    'NK_ENUMERATION_TYPE',
+    'NK_POINTER_TYPE',
+    'NK_ARRAY_TYPE',
+    'NK_FUNCTION_TYPE',
+    'NK_SIGNATURE_TYPE',
+    'NK_INTERFACE_TYPE',
+    'NK_STRUCTURE_TYPE',
+    'NK_CLASS_TYPE',
+    'NK_TYPE',
 
+    'NK_TYPES',
     'NK_SCOPES',
     'NK_STATEMENTS',
     'NK_EXPRESSIONS',
@@ -72,6 +91,14 @@ class NodeKind(IntEnum):
     INT16_EXPR = auto()
     INT32_EXPR = auto()
     INT64_EXPR = auto()
+    UINT8_EXPR = auto()
+    UINT16_EXPR = auto()
+    UINT32_EXPR = auto()
+    UINT64_EXPR = auto()
+    FLOAT16_EXPR = auto()
+    FLOAT32_EXPR = auto()
+    FLOAT64_EXPR = auto()
+    FLOAT80_EXPR = auto()
     NULL_EXPR = auto()
     UNDEFINED_EXPR = auto()
     FUNCTION_EXPR = auto()
@@ -119,6 +146,16 @@ class NodeKind(IntEnum):
     STATEMENT_SCOPE = auto()
     LOOP_SCOPE = auto()
     CASE_SCOPE = auto()
+    PRIMITIVE_TYPE = auto()
+    ENUMERATION_TYPE = auto()
+    POINTER_TYPE = auto()
+    ARRAY_TYPE = auto()
+    FUNCTION_TYPE = auto()
+    SIGNATURE_TYPE = auto()
+    INTERFACE_TYPE = auto()
+    STRUCTURE_TYPE = auto()
+    CLASS_TYPE = auto()
+    TYPE = auto()
 
 
 NK_NONE = NodeKind.NONE
@@ -126,6 +163,14 @@ NK_INT8_EXPR = NodeKind.INT8_EXPR
 NK_INT16_EXPR = NodeKind.INT16_EXPR
 NK_INT32_EXPR = NodeKind.INT32_EXPR
 NK_INT64_EXPR = NodeKind.INT64_EXPR
+NK_UINT8_EXPR = NodeKind.UINT8_EXPR
+NK_UINT16_EXPR = NodeKind.UINT16_EXPR
+NK_UINT32_EXPR = NodeKind.UINT32_EXPR
+NK_UINT64_EXPR = NodeKind.UINT64_EXPR
+NK_FLOAT16_EXPR = NodeKind.FLOAT16_EXPR
+NK_FLOAT32_EXPR = NodeKind.FLOAT32_EXPR
+NK_FLOAT64_EXPR = NodeKind.FLOAT64_EXPR
+NK_FLOAT80_EXPR = NodeKind.FLOAT80_EXPR
 NK_NULL_EXPR = NodeKind.NULL_EXPR
 NK_UNDEFINED_EXPR = NodeKind.UNDEFINED_EXPR
 NK_FUNCTION_EXPR = NodeKind.FUNCTION_EXPR
@@ -173,7 +218,18 @@ NK_METHOD_SCOPE = NodeKind.METHOD_SCOPE
 NK_STATEMENT_SCOPE = NodeKind.STATEMENT_SCOPE
 NK_LOOP_SCOPE = NodeKind.LOOP_SCOPE
 NK_CASE_SCOPE = NodeKind.CASE_SCOPE
+NK_PRIMITIVE_TYPE = NodeKind.PRIMITIVE_TYPE
+NK_ENUMERATION_TYPE = NodeKind.ENUMERATION_TYPE
+NK_POINTER_TYPE = NodeKind.POINTER_TYPE
+NK_ARRAY_TYPE = NodeKind.ARRAY_TYPE
+NK_FUNCTION_TYPE = NodeKind.FUNCTION_TYPE
+NK_SIGNATURE_TYPE = NodeKind.SIGNATURE_TYPE
+NK_INTERFACE_TYPE = NodeKind.INTERFACE_TYPE
+NK_STRUCTURE_TYPE = NodeKind.STRUCTURE_TYPE
+NK_CLASS_TYPE = NodeKind.CLASS_TYPE
+NK_TYPE = NodeKind.TYPE
 
+NK_TYPES: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('TYPE'))
 NK_SCOPES: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('SCOPE'))
 NK_STATEMENTS: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('STMT'))
 NK_EXPRESSIONS: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('EXPR'))

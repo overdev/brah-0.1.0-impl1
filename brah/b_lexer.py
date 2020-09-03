@@ -392,19 +392,20 @@ class Lexer:
                     if char != '.':
                         tokens.append(Tkn(TT_FLOAT if has_decimal else TT_INT, (line, column), slice(start, idx)))
                         start = idx
-                if char in SCN_DELIMITERS:
+                if char in SCN_OPERATORS:
                     if char == '.':
                         if not has_decimal:
                             has_decimal = True
                         else:
                             error(f"Unexpected char '{char}'.")
                     else:
-                        scan_mode = SM_NONE
-                        tokens.append(Tkn(char, (line, column), slice(idx, idx + 1)))
-                        start = idx
-                elif char in SCN_OPERATORS:
-                    scan_mode = SM_OPERATOR
-                    oper = char
+                        scan_mode = SM_OPERATOR
+                        oper = char
+                elif char in SCN_DELIMITERS:
+                    scan_mode = SM_NONE
+                    tokens.append(Tkn(char, (line, column), slice(idx, idx + 1)))
+                    start = idx
+
                 elif char in SCN_WHITESPACE:
                     scan_mode = SM_NONE
                 elif char in SCN_ALPHA or char in SCN_QUOTATION:
@@ -450,6 +451,7 @@ class Lexer:
                     scan_mode = SM_NAME
                 elif char in SCN_DECDIGITS:
                     scan_mode = SM_NUMBER
+                    start = idx
                 elif char in SCN_DELIMITERS:
                     scan_mode = SM_NONE
                     tokens.append(Tkn(char, (line, column), slice(idx, idx + 1)))
@@ -467,6 +469,8 @@ class Lexer:
             else:
                 column += 1
 
+        for t in tokens:
+            print(t.kind, source[t.value])
         return tokens
 
 # endregion (classes)

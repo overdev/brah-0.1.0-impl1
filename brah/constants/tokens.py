@@ -83,8 +83,25 @@ __all__ = [
     'OP_INC',
     'OP_DEC',
 
+    'TY_VOID',
+    'TY_INT8',
+    'TY_INT16',
+    'TY_INT32',
+    'TY_INT64',
+    'TY_UINT8',
+    'TY_UINT16',
+    'TY_UINT32',
+    'TY_UINT64',
+    'TY_FLOAT16',
+    'TY_FLOAT32',
+    'TY_FLOAT64',
+    'TY_FLOAT80',
+
     'KEYWORDS',
     'OPERATORS',
+    'PRIMITIVES',
+    'TYPE_MODIFIERS',
+
 ]
 
 # ---------------------------------------------------------
@@ -159,6 +176,27 @@ OP_INC = "++"
 OP_DEC = "--"
 
 OPERATORS = [name for name in globals() if name.startswith('OP_')]
+
+TY_VOID = "vazio"
+TY_INT8 = "int8s"
+TY_INT16 = "int16s"
+TY_INT32 = "int32s"
+TY_INT64 = "int64s"
+TY_UINT8 = "int8d"
+TY_UINT16 = "int16d"
+TY_UINT32 = "int32d"
+TY_UINT64 = "int64d"
+TY_FLOAT16 = "real16"
+TY_FLOAT32 = "real32"
+TY_FLOAT64 = "real64"
+TY_FLOAT80 = "real80"
+
+PRIMITIVES = [name for name in globals() if name.startswith('TY_')]
+
+TYMOD_ISIGNED = "sinalado"
+TYMOD_IUNSIGNED = "dessinalado"
+
+TYPE_MODIFIERS = [name for name in globals() if name.startswith('TYMOD_')]
 
 #
 # class TokenKind(Enum):

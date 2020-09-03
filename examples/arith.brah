@@ -1,5 +1,5 @@
 
-função potência(x, n) {
+função potência(x: real16, n: int8s): int8s {
     repita (n - 1) {
         x = x * x;
     }
@@ -7,15 +7,15 @@ função potência(x, n) {
 }
 
 
-função hipotenusa(x, y) {
-    var n = 2;
+função hipotenusa(x: real16, y: real16): int8s {
+    var n: int8s = 2;
     retorne potência(x, n) + potência(y, n);
 }
 
 
-função principal() {
-    var x = 2;
-    var y = 3;
+função principal(): int8s {
+    var x: real16 = 2.0;
+    var y: real16 = 3.0;
 
     escreva hipotenusa(x, y);
 

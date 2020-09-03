@@ -37,7 +37,7 @@ class Operand:
 
 class Constant(Operand):
 
-    def __init__(self, value: int):
+    def __init__(self, value: Union[int, float]):
         super(Constant, self).__init__(value)
 
     def __str__(self):
@@ -384,7 +384,7 @@ class Compiler:
 
     def compile(self):
         parser = Parser(self.fname)
-        parser.parse()
+        parser.parse(AssemblyNode())
         self.scope = parser.scope
         self.compile_ast()
 
@@ -474,7 +474,6 @@ class Compiler:
     def compile_stmt_print(self, stmt_node: StmtNode, instr: Instruction) -> Instruction:
         instr = self.compile_expr(stmt_node['expr'], instr)
         return instr.emit_after(IRQ, Constant(1))
-        # self.emit(IRQ, '1')
 
     def compile_stmt_return(self, stmt_node: StmtNode, instr: Instruction) -> Instruction:
         instr = self.compile_expr(stmt_node.nodes['expr'], instr)
@@ -582,10 +581,30 @@ class Compiler:
             instr = self.compile_expr_binary(expr_node, instr)
         elif expr_node.kind is NK_UNARY_EXPR:
             instr = self.compile_expr_unary(expr_node, instr)
+        elif expr_node.kind is NK_INT8_EXPR:
+            instr = self.compile_expr_i8(expr_node, instr)
+        elif expr_node.kind is NK_INT16_EXPR:
+            instr = self.compile_expr_i16(expr_node, instr)
         elif expr_node.kind is NK_INT32_EXPR:
             instr = self.compile_expr_i32(expr_node, instr)
         elif expr_node.kind is NK_INT64_EXPR:
             instr = self.compile_expr_i64(expr_node, instr)
+        elif expr_node.kind is NK_UINT8_EXPR:
+            instr = self.compile_expr_u8(expr_node, instr)
+        elif expr_node.kind is NK_UINT16_EXPR:
+            instr = self.compile_expr_u16(expr_node, instr)
+        elif expr_node.kind is NK_UINT32_EXPR:
+            instr = self.compile_expr_u32(expr_node, instr)
+        elif expr_node.kind is NK_UINT64_EXPR:
+            instr = self.compile_expr_u64(expr_node, instr)
+        elif expr_node.kind is NK_FLOAT16_EXPR:
+            instr = self.compile_expr_f16(expr_node, instr)
+        elif expr_node.kind is NK_FLOAT32_EXPR:
+            instr = self.compile_expr_f32(expr_node, instr)
+        elif expr_node.kind is NK_FLOAT64_EXPR:
+            instr = self.compile_expr_f64(expr_node, instr)
+        elif expr_node.kind is NK_FLOAT80_EXPR:
+            instr = self.compile_expr_f80(expr_node, instr)
         elif expr_node.kind is NK_VAR_EXPR:
             instr = self.compile_expr_var(expr_node, instr)
         elif expr_node.kind is NK_PARAM_EXPR:
@@ -616,23 +635,45 @@ class Compiler:
             '+': POS, '-': NEG,
         }.get(expr_node.op, '?')
         return instr.emit_after(opcode)
-        # self.emit(opcode)
+
+    def compile_expr_i8(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_SB, Constant(int(expr_node.value)))
+
+    def compile_expr_i16(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_SW, Constant(int(expr_node.value)))
 
     def compile_expr_i32(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_D, Constant(int(expr_node['value'])))
-        # self.emit(CONST_D, expr_node['value'])
+        return instr.emit_after(CONST_SD, Constant(int(expr_node.value)))
 
     def compile_expr_i64(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_FD, Constant(int(expr_node['value'])))
-        # self.emit(CONST_FD, expr_node['value'])
+        return instr.emit_after(CONST_SQ, Constant(int(expr_node.value)))
+
+    def compile_expr_u8(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_B, Constant(int(expr_node.value)))
+
+    def compile_expr_u16(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_W, Constant(int(expr_node.value)))
+
+    def compile_expr_u32(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_D, Constant(int(expr_node.value)))
+
+    def compile_expr_u64(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_Q, Constant(int(expr_node.value)))
+
+    def compile_expr_f16(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_FH, Constant(float(expr_node.value)))
+
+    def compile_expr_f32(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_FS, Constant(float(expr_node.value)))
+
+    def compile_expr_f64(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_FD, Constant(float(expr_node.value)))
 
     def compile_expr_var(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(GET, StackOffset(expr_node['decl'].offset))
-        # self.emit(GET, str(expr_node['decl'].offset))
 
     def compile_expr_param(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(GET, StackOffset(expr_node['decl'].offset))
-        # self.emit(GET, str(expr_node['decl'].offset))
 
     def compile_expr_fcall(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
         name = expr_node['decl'].name

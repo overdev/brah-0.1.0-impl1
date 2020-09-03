@@ -3,15 +3,21 @@ from enum import IntEnum, auto
 __all__ = [
     'Opcode',
     'OPCODES',
+    'CONST',
     'HALT',
     'NOP',
     'CONST_B',
     'CONST_W',
     'CONST_D',
     'CONST_Q',
+    'CONST_SB',
+    'CONST_SW',
+    'CONST_SD',
+    'CONST_SQ',
     'CONST_FH',
     'CONST_FS',
     'CONST_FD',
+    'CONST_FX',
     'ADD',
     'SADD',
     'FADD',
@@ -73,9 +79,14 @@ class Opcode(IntEnum):
     CONST_W = auto()  # WORD INTEGER
     CONST_D = auto()  # DOUBLE WORD INTEGER
     CONST_Q = auto()  # QUAD WORD INTEGER
+    CONST_SB = auto()  # UNSIGNED BYTE INTEGER
+    CONST_SW = auto()  # UNSIGNED WORD INTEGER
+    CONST_SD = auto()  # UNSIGNED DOUBLE WORD INTEGER
+    CONST_SQ = auto()  # UNSIGNED QUAD WORD INTEGER
     CONST_FH = auto()  # HALP PRECISION FLOAT
     CONST_FS = auto()  # SINGLE PRECISION FLOAT
     CONST_FD = auto()  # DOUBLE PRECISION FLOAT
+    CONST_FX = auto()  # EXTENDED PRECISION FLOAT
     ADD = auto()
     SADD = auto()
     FADD = auto()
@@ -132,9 +143,14 @@ CONST_B = Opcode.CONST_B
 CONST_W = Opcode.CONST_W
 CONST_D = Opcode.CONST_D
 CONST_Q = Opcode.CONST_Q
+CONST_SB = Opcode.CONST_SB
+CONST_SW = Opcode.CONST_SW
+CONST_SD = Opcode.CONST_SD
+CONST_SQ = Opcode.CONST_SQ
 CONST_FH = Opcode.CONST_FH
 CONST_FS = Opcode.CONST_FS
 CONST_FD = Opcode.CONST_FD
+CONST_FX = Opcode.CONST_FX
 ADD = Opcode.ADD
 SADD = Opcode.SADD
 FADD = Opcode.FADD
@@ -184,7 +200,10 @@ INC = Opcode.INC
 DEC = Opcode.DEC
 IRQ = Opcode.IRQ
 
+CONST = [op for op in Opcode if op.name.startswith('CONST')]
 OPCODES = [name for name in Opcode.__members__]
+
+print(CONST)
 
 # endregion (constants)
 # ---------------------------------------------------------

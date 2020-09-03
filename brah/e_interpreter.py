@@ -60,7 +60,7 @@ class Interpreter:
 
         while True:
             opcode = code[ip]
-            op_name = OPCODES[opcode]
+            op_name = OPCODES[opcode] if isinstance(opcode, int) else ''
             ip += 1
             if opcode == HALT:
                 break
@@ -74,7 +74,7 @@ class Interpreter:
                 if syscall == 1:
                     print(stack[sp])
                     sp -= 1
-            elif opcode == CONST_D:
+            elif opcode in CONST:
                 # get a immediate operand and increase IP
                 sp += 1
                 stack[sp] = code[ip]

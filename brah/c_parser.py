@@ -1,15 +1,12 @@
 import random
-from typing import Optional, Any, List, Dict, NamedTuple, Tuple, Union
+from typing import Optional, List, Dict, Tuple, Union
 from brah.constants.tokens import *
 from brah.constants.nodes import *
-from brah.constants.scopes import *
 from brah.b_lexer import *
 from brah.a_scanner import Source
 
 __all__ = [
-    'AstNode',
     'Parser',
-    'Scope',
     'ASTNode',
     'AssemblyNode',
     'DeclNode',
@@ -37,130 +34,6 @@ DECL_TO_EXPR = {
 # region CLASSES
 
 
-class Scope:
-    """Scope class.
-
-    Defines a local execution context where names (variables and parameters)
-    can be defined, and statements can be executed. It is basically a block
-    of code.
-
-    Scopes can be nested and this allows for name lookups in preceding
-    contexts. It is an error to look for a name that doesn't exist (i.e.
-    wich is not defined).
-
-    Basic control of name access (read and write) is given. Each access
-    increments a counter for the reading or writing made. This allows for
-    unused name detection.
-
-    :param offset: the base ofset for the local names in the scope.
-    :param parent: the optional parent scope.
-    """
-
-    FRAME_OFFSET = 3
-
-    def __init__(self, offset: int = 0, parent: Optional['Scope'] = None, scope_kind: ScopeKind = SK_STATEMENT):
-        self.parent: Optional['Scope'] = parent
-        self.names: Dict[str, AstNode] = {}
-        self.base_offset: int = offset
-        self.block: AstNode = AstNode(NK_BLOCK, {'code': [], 'scope': self})
-        self.kind: ScopeKind = scope_kind
-
-    @property
-    def is_module_level(self):
-        return self.parent and self.parent.kind is SK_MODULE
-
-    def find(self, *scope_kinds: ScopeKind) -> Optional['Scope']:
-        """Performs a scope lookup and returns the first scope of given kinds.
-
-        Useful to find, for example, the scope of a function being defined.
-
-        :param scope_kinds: The kinds of scope to match.
-        :returns: The scope found, or None
-        """
-        if self.kind in scope_kinds:
-            return self
-        elif self.parent:
-            return self.parent.find(*scope_kinds)
-        else:
-            return None
-
-    def declare_entrypoint(self, name: str, node: 'AstNode') -> None:
-        """Declares a new name (it must be a function) in the current scope.
-
-        :param name: the variable or parameter name.
-        :param node: the AST node that defines de name.
-        :returns: None.
-        """
-        assert self.is_module_level, "Entry function must be defined in module level."
-        assert node.kind is NK_FUNCTION_DECL, f"'{name}' is not a function"
-        self.declare(name, node)
-
-    def declare(self, name: str, node: 'AstNode') -> None:
-        """Declares a new name (variable or parameter) in the current scope.
-
-        :param name: the variable or parameter name.
-        :param node: the AST node that defines de name.
-        :returns: None.
-        """
-        assert name not in self.names, f"'{name}' already defined in this scope."
-        node.data['offset'] = self.base_offset
-        self.base_offset += 1
-        self.names[name] = node
-
-    def read(self, name: str) -> Optional['AstNode']:
-        """Perform a name lookup and returns the first node matching the name or None.
-
-        If the node is found in the current scope, its read counter is incremented
-        and the node is returned. Alternatively, if the scope has a parent scope,
-        that scope is looked up. The lookup chain continues until the topmost scope
-        return a node or None.
-
-        :param name: the name to find.
-        :returns: The AST node found, or None.
-        """
-        if name in self.names:
-            self.names[name].data['reads'] += 1
-            return self.names[name]
-        elif self.parent:
-            return self.parent.read(name)
-        else:
-            return None
-
-    def write(self, name: str) -> bool:
-        """Perform a name lookup and returns the first node matching the name or None.
-
-        If the node is found in the current scope, its write counter is incremented
-        and the node is returned. Alternatively, if the scope has a parent scope,
-        that scope is looked up. The lookup chain continues until the topmost scope
-        return a node or None.
-
-        :param name: the name to find.
-        :returns: The AST node found, or None.
-        """
-        if name in self.names:
-            self.names[name].data['writes'] += 1
-            return True
-        elif self.parent:
-            return self.parent.write(name)
-        else:
-            return False
-
-    def get(self, name: str) -> Optional['AstNode']:
-        """Perform a name lookup and returns the first node matching the name or None.
-
-        Unlike `read()` and `write()`, it does not increment access counters.
-
-        :param name: the name to find.
-        :returns: The AST node found, or None.
-        """
-        if name in self.names:
-            return self.names[name]
-        elif self.parent:
-            return self.parent.get(name)
-        else:
-            return None
-
-
 class ASTNode:
 
     def __init__(self, kind: NodeKind, **kwargs):
@@ -176,19 +49,12 @@ class ASTNode:
         return f"({self.kind.name}: {self.pos})"
 
 
-class AssemblyNode(ASTNode):
-
-    def __init__(self, kind: NodeKind):
-        # assert kind in (NK_MODULE,)
-        super(AssemblyNode, self).__init__(kind)
-        self.modules: List[AssemblyNode] = []
-
-
 class DeclNode(ASTNode):
 
     def __init__(self, kind: NodeKind, name: str):
         super(DeclNode, self).__init__(kind)
         self.name: str = name
+        self.type: Optional[TypeNode] = None
         self.definition: Optional[ASTNode] = None
         self.initializer: Optional[ExprNode] = None
         self.scope: Optional[ScopeNode] = None
@@ -227,6 +93,7 @@ class ExprNode(ASTNode):
         super(ExprNode, self).__init__(kind, **kwargs)
         self.nodes: Dict[str, Union[str, ExprNode]] = kwargs.copy()
         self.op: str = kwargs.get('op', '')
+        self.value: str = kwargs.get('value', '0')
 
     def __getitem__(self, key) -> Union['ExprNode', 'DeclNode']:
         return self.nodes.__getitem__(key)
@@ -239,14 +106,87 @@ class TypeNode(ASTNode):
 
     def __init__(self, kind: NodeKind, **kwargs):
         super(TypeNode, self).__init__(kind, **kwargs)
+        # all
+        self.name: str = kwargs.get('name')
+        self.size: int = kwargs.get('size', 1)
+
+        # primitives
+        self.integer: bool = kwargs.get('integer', True)
+        self.signed: bool = kwargs.get('signed', True) and self.integer
+
+        # pointers, arrays and classes
+        self.base: Optional[TypeNode] = kwargs.get('base')
+
+        # arrays
+        self.length: ExprNode = kwargs.get('length', ExprNode(NK_INT32_EXPR, value='-1'))
+
+        # signatures and functions
+        self.params: List[TypeNode] = kwargs.get('params', [])
+        self.result: TypeNode = kwargs.get('result')
+
+        # interfaces, structures and classes
+        self.fields: List[TypeNode] = kwargs.get('fields', [])
+        self.methods: List[TypeNode] = kwargs.get('methods', [])
+        self.operators: List[TypeNode] = kwargs.get('methods', [])
+
+    def accepts(self, other: 'TypeNode') -> bool:
+        if other.kind is self.kind:
+            kind = self.kind
+            if kind is NK_PRIMITIVE_TYPE:
+                if self.size < other.signed:
+                    return False
+                if self.signed != other.signed:
+                    return False
+                if self.integer != other.integer:
+                    return False
+            elif kind is NK_FUNCTION_TYPE:
+                if len(self.params) != len(other.params):
+                    return False
+                if not self.result.accepts(other.result):
+                    return False
+                for i in range(len(self.params)):
+                    if not self.params[i].accepts(other.params[i]):
+                        return False
+            return True
+        else:
+            return False
+
+
+class AssemblyNode(ASTNode):
+    types: Dict[str, ASTNode] = {
+        TY_VOID: TypeNode(NK_PRIMITIVE_TYPE, name=TY_VOID, signed=False, size=1, integer=True),
+        TY_INT8: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT8, signed=True, size=1, integer=True),
+        TY_INT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT16, signed=True, size=2, integer=True),
+        TY_INT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT32, signed=True, size=4, integer=True),
+        TY_INT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT64, signed=True, size=8, integer=True),
+        TY_UINT8: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT8, signed=False, size=1, integer=True),
+        TY_UINT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT16, signed=False, size=2, integer=True),
+        TY_UINT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT32, signed=False, size=4, integer=True),
+        TY_UINT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT64, signed=False, size=8, integer=True),
+        TY_FLOAT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT16, signed=False, size=2, integer=False),
+        TY_FLOAT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT32, signed=False, size=4, integer=False),
+        TY_FLOAT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT64, signed=False, size=8, integer=False),
+        TY_FLOAT80: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT80, signed=False, size=10, integer=False),
+    }
+
+    def __init__(self, **kwargs):
+        # assert kind in (NK_MODULE,)
+        super(AssemblyNode, self).__init__(NK_NONE)
+        self.modules: List[ScopeNode] = []
+        self.target_fname: str = kwargs.get('target', '../output/out.brbc')
+        self.source_dir: str = kwargs.get('src', '../src')
+
+    @staticmethod
+    def find(name: str) -> Optional[TypeNode]:
+        return AssemblyNode.types.get(name)
 
 
 class ScopeNode(ASTNode):
-
     FRAME_OFFSET = 3
 
-    def __init__(self, kind: NodeKind, parent: Optional['ScopeNode'] = None):
+    def __init__(self, kind: NodeKind, parent: Optional['ScopeNode'] = None, assembly: Optional[AssemblyNode] = None):
         super(ScopeNode, self).__init__(kind)
+        self._assembly: Optional[AssemblyNode] = assembly
         self.parent: Optional[ScopeNode] = parent
         self.locals: Dict[str, DeclNode] = {}
         self.code: List[Union[StmtNode, DeclNode]] = []
@@ -256,6 +196,19 @@ class ScopeNode(ASTNode):
         self.jump_labels: Dict[str, int] = {}
         self.default_labels: Dict[str, str] = {}
         self.initializers: List[DeclNode] = []
+        self.types: Dict[str, TypeNode] = {}
+
+    @property
+    def assembly(self) -> Optional[AssemblyNode]:
+        if self.kind is NK_MODULE_SCOPE:
+            return self._assembly
+        else:
+            assert self.parent, "Assembly node is not defined."
+            return self.parent.assembly
+
+    @assembly.setter
+    def assembly(self, value: AssemblyNode):
+        self._assembly = value
 
     @property
     def in_function_scope(self) -> bool:
@@ -346,44 +299,6 @@ class ScopeNode(ASTNode):
             return None
 
 
-class AstNode(NamedTuple):
-    """AstNode (Abstract Syntax Tree Node) named tuple class.
-
-    Defines a single node in the Abstract Syntax Tree structure.
-
-    An `AstNode` instance's only purpose is to hold minimum necessary
-    information that allows it to be compiled later into bytecode. The
-    information saved depends on the kind of node, but it is mainly
-    separated in two members: `data` and `nodes`.
-
-    In data, information related to the node itself is stored. It might be,
-    for example, the string of a variable's name.
-
-    In nodes, any child node that is structurally connected to this node is
-    stored. It might be, for example, the left and right operands of a
-    binary operation. It's optional.
-
-    **Members:**
-
-    `kind`: the kind that distinguishes this node, a `NodeKind` enum
-    member.
-
-    `data`: the node's own aditional information.
-
-    `nodes`: the optional child nodes this node might have.
-    """
-    kind: NodeKind
-    data: Dict[str, Any]
-    nodes: Optional[Dict[str, 'AstNode']] = None
-
-    def __repr__(self):
-        data = ', '.join([f"{k}: {v}" for (k, v) in self.data.items()]) if self.data else ''
-        nodes = ', '.join([f"{k}: {v}" for (k, v) in self.nodes.items()]) if self.nodes else ''
-        return f"{self.kind.name}({data}, {nodes})"
-
-    __str__ = __repr__
-
-
 class Parser:
     """Parser class
 
@@ -406,15 +321,17 @@ class Parser:
     def __init__(self, fname: str):
         self.fname: str = fname
         self.ir: List[str] = []
-        self.ast: Optional[AstNode] = None
-        self.glb: Dict[str, AstNode] = {}
+        self.ast: Optional[ASTNode] = None
+        self.glb: Dict[str, ASTNode] = {}
         self.scope: ScopeNode = ScopeNode(NK_MODULE_SCOPE)
 
-    def parse(self):
+    def parse(self, assembly_node: AssemblyNode):
         """Starts the `Lexer` and builds the AST from its token stream.
 
         :returns: None
         """
+        assembly_node.modules.append(self.scope)
+        self.scope.assembly = assembly_node
         lexer = Lexer()
         stream = lexer.gen_tokens(Source.load(self.fname))
         # for t in stream.tokens:
@@ -503,7 +420,7 @@ class Parser:
             return ExprNode(NK_INT32_EXPR, value=token)
 
         elif stream.match_token(TT_FLOAT):
-            return ExprNode(NK_INT64_EXPR, value=token)
+            return ExprNode(NK_FLOAT32_EXPR, value=token)
 
         elif stream.match_token(TT_NAME):
             node: DeclNode = scope.find(token)
@@ -554,7 +471,8 @@ class Parser:
         if not stream.is_token(TT_RPAREN):
             args.append(self.parse_expr(scope, stream))
             while stream.match_token(TT_COMMA):
-                args.append(self.parse_expr(scope, stream))
+                arg = self.parse_expr(scope, stream)
+                args.append(arg)
         stream.expect(TT_RPAREN)
         return args
 
@@ -726,8 +644,12 @@ class Parser:
         :returns: the variable declaration node.
         """
         stream.expect_keyword(KW_VARIABLE)
-        name = self.parse_name(stream)
-        decl = DeclNode(NK_VAR_DECL, name)
+        decl = self.parse_identifier(scope, stream)
+        decl.kind = NK_VAR_DECL
+        stream.expect(TT_COLON)
+        var_type = self.parse_type_spec(scope, stream)
+        # decl = DeclNode(NK_VAR_DECL, name)
+        decl.type = var_type
         if stream.match_token(TT_EQUAL):
             expr = self.parse_expr(scope, stream)
             decl.write()
@@ -735,7 +657,7 @@ class Parser:
             expr = ExprNode(NK_UNDEFINED_EXPR)
         decl.initializer = expr
         stream.expect(TT_SEMI)
-        assert scope.declare(name, decl, NK_FUNCTION_SCOPE, NK_METHOD_SCOPE), f"{name} already declared."
+        assert scope.declare(decl.name, decl, NK_FUNCTION_SCOPE, NK_METHOD_SCOPE), f"{decl.name} already declared."
 
         return decl
 
@@ -752,6 +674,8 @@ class Parser:
         assert scope.declare(name, decl, NK_MODULE_SCOPE), f"{name} already declared."
         fscope: ScopeNode = ScopeNode(NK_FUNCTION_SCOPE, scope)
         decl.params = self.parse_decl_params(fscope, stream)
+        stream.expect(TT_COLON)
+        decl.type = self.parse_type_spec(scope, stream)
         decl.is_main = name == SW_MAINFUNCTION
         decl.definition = fscope
         stream.expect(TT_LBRACE)
@@ -792,9 +716,11 @@ class Parser:
         :param stream: the source stream of tokens.
         :returns: a parameter declaration node.
         """
-        name = self.parse_name(stream)
-        decl = DeclNode(NK_PARAM_DECL, name)
-        assert scope.declare(name, decl, NK_FUNCTION_SCOPE), f"{name} already declared."
+        decl = self.parse_identifier(scope, stream)
+        decl.kind = NK_PARAM_DECL
+        stream.expect(TT_COLON)
+        decl.type = self.parse_type_spec(scope, stream)
+        assert scope.declare(decl.name, decl, NK_FUNCTION_SCOPE), f"{decl.name} already declared."
         return decl
 
     def parse_stmt(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
@@ -1028,6 +954,31 @@ class Parser:
 
         stream.expect(TT_SEMI)
         return StmtNode(kind, op=op, expr=expr)
+
+    def parse_type_spec(self, scope: ScopeNode, stream: TokenStream) -> TypeNode:
+        module = scope.find_scope(NK_MODULE_SCOPE)
+        assert module, "What happened to the module?"
+        base_name: str = self.parse_name(stream)
+
+        type_decl = module.assembly.find(base_name)
+        assert type_decl, f"Undefined '{base_name}' type."
+        return type_decl
+
+    def parse_identifier(self, scope: ScopeNode, stream: TokenStream) -> DeclNode:
+        base_type: Optional[TypeNode] = None
+
+        name = self.parse_name(stream)
+        while stream.is_token(TT_LBRACKET, TT_MULT):
+            if stream.match_token(TT_MULT):
+                base_type = TypeNode(NK_POINTER_TYPE, base=base_type)
+            else:
+                base_type = TypeNode(NK_ARRAY_TYPE, base=base_type)
+                if not stream.is_token(TT_RBRACKET):
+                    base_type.length = self.parse_expr(scope, stream)
+                    stream.expect(TT_RBRACKET)
+        decl = DeclNode(NK_NAME, name=name)
+        decl.type = base_type
+        return decl
 
 # endregion (classes)
 # ---------------------------------------------------------
