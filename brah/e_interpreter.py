@@ -91,11 +91,12 @@ class Interpreter:
                 stack[fp + code[ip]] = stack[sp]
                 sp -= 1
                 ip += 1
+            elif opcode == NEG:
+                # pop top to auto var
+                stack[sp] = -stack[sp]
 
             elif opcode == INC:
-                addr = fp + code[ip]
-                value = stack[addr]
-                stack[addr] = value + 1
+                stack[fp + code[ip]] += 1
                 ip += 1
 
             elif opcode == DEC:

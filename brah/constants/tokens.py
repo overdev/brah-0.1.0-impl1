@@ -84,6 +84,7 @@ __all__ = [
     'OP_DEC',
 
     'TY_VOID',
+    'TY_BOOL',
     'TY_INT8',
     'TY_INT16',
     'TY_INT32',
@@ -97,6 +98,20 @@ __all__ = [
     'TY_FLOAT64',
     'TY_FLOAT80',
 
+    'SFX_INT8',
+    'SFX_INT16',
+    'SFX_INT32',
+    'SFX_INT64',
+    'SFX_UINT8',
+    'SFX_UINT16',
+    'SFX_UINT32',
+    'SFX_UINT64',
+    'SFX_FLOAT16',
+    'SFX_FLOAT32',
+    'SFX_FLOAT64',
+    'SFX_FLOAT80',
+
+    'SUFFIXES',
     'KEYWORDS',
     'OPERATORS',
     'PRIMITIVES',
@@ -178,6 +193,7 @@ OP_DEC = "--"
 OPERATORS = [name for name in globals() if name.startswith('OP_')]
 
 TY_VOID = "vazio"
+TY_BOOL = "booleano"
 TY_INT8 = "int8s"
 TY_INT16 = "int16s"
 TY_INT32 = "int32s"
@@ -192,6 +208,21 @@ TY_FLOAT64 = "real64"
 TY_FLOAT80 = "real80"
 
 PRIMITIVES = [name for name in globals() if name.startswith('TY_')]
+
+SFX_INT8 = "u"
+SFX_INT16 = "c"
+SFX_INT32 = "i"
+SFX_INT64 = "l"
+SFX_UINT8 = "ud"
+SFX_UINT16 = "cd"
+SFX_UINT32 = "id"
+SFX_UINT64 = "ld"
+SFX_FLOAT16 = "m"
+SFX_FLOAT32 = "r"
+SFX_FLOAT64 = "d"
+SFX_FLOAT80 = "x"
+
+SUFFIXES = [name for name in globals() if name.startswith('SFX_')]
 
 TYMOD_ISIGNED = "sinalado"
 TYMOD_IUNSIGNED = "dessinalado"

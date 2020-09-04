@@ -182,13 +182,21 @@ class Instruction:
         label = f'{self.label}:\n' if self.label else ''
         address = "{0:04}".format(self.address)
         opcode = "{0:>4}".format(self.opcode.value)
-        # arg_vals = " "
+        arg_vals = " "
+        arg_labels = " "
         # for a in self.args:
         #     if isinstance(a, CodeAddress):
         #         print(a.value)
-        arg_vals = " ".join(tuple("{0:>4}".format(arg.value) for arg in self.args))
+        for arg in self.args:
+            if arg.value is None:
+                raise RuntimeError()
+            v = "{0:>4}".format(arg.value)
+            l = "{0:>4}".format(str(arg))
+            arg_vals = f"{arg_vals} {v}"
+            arg_labels = f"{arg_vals} {l}"
         arg_vals = "{0:14}".format(arg_vals)
-        arg_labels = " ".join(tuple("{0:>4}".format(str(arg)) for arg in self.args))
+        # arg_vals = " ".join(tuple( for arg in self.args))
+        # arg_labels = " ".join(tuple("{0:>4}".format(str(arg)) for arg in self.args))
 
         result = f"{label}\t{address} {opcode} {arg_vals} :: {self.opcode.name} {arg_labels}"
         return result
@@ -637,37 +645,40 @@ class Compiler:
         return instr.emit_after(opcode)
 
     def compile_expr_i8(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_SB, Constant(int(expr_node.value)))
+        return instr.emit_after(CONST_SB, Constant(expr_node.constant))
 
     def compile_expr_i16(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_SW, Constant(int(expr_node.value)))
+        return instr.emit_after(CONST_SW, Constant(expr_node.constant))
 
     def compile_expr_i32(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_SD, Constant(int(expr_node.value)))
+        return instr.emit_after(CONST_SD, Constant(expr_node.constant))
 
     def compile_expr_i64(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_SQ, Constant(int(expr_node.value)))
+        return instr.emit_after(CONST_SQ, Constant(expr_node.constant))
 
     def compile_expr_u8(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_B, Constant(int(expr_node.value)))
+        return instr.emit_after(CONST_B, Constant(expr_node.constant))
 
     def compile_expr_u16(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_W, Constant(int(expr_node.value)))
+        return instr.emit_after(CONST_W, Constant(expr_node.constant))
 
     def compile_expr_u32(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_D, Constant(int(expr_node.value)))
+        return instr.emit_after(CONST_D, Constant(expr_node.constant))
 
     def compile_expr_u64(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_Q, Constant(int(expr_node.value)))
+        return instr.emit_after(CONST_Q, Constant(expr_node.constant))
 
     def compile_expr_f16(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_FH, Constant(float(expr_node.value)))
+        return instr.emit_after(CONST_FH, Constant(expr_node.constant))
 
     def compile_expr_f32(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_FS, Constant(float(expr_node.value)))
+        return instr.emit_after(CONST_FS, Constant(expr_node.constant))
 
     def compile_expr_f64(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_FD, Constant(float(expr_node.value)))
+        return instr.emit_after(CONST_FD, Constant(expr_node.constant))
+
+    def compile_expr_f80(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(CONST_FX, Constant(expr_node.constant))
 
     def compile_expr_var(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(GET, StackOffset(expr_node['decl'].offset))

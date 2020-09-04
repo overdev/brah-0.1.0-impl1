@@ -75,6 +75,7 @@ __all__ = [
 
     'NK_TYPES',
     'NK_SCOPES',
+    'NK_LITERALS',
     'NK_STATEMENTS',
     'NK_EXPRESSIONS',
     'NK_DECLARARIONS',
@@ -229,6 +230,20 @@ NK_STRUCTURE_TYPE = NodeKind.STRUCTURE_TYPE
 NK_CLASS_TYPE = NodeKind.CLASS_TYPE
 NK_TYPE = NodeKind.TYPE
 
+NK_LITERALS: Tuple[NodeKind, ...] = (
+    NK_INT8_EXPR,
+    NK_INT16_EXPR,
+    NK_INT32_EXPR,
+    NK_INT64_EXPR,
+    NK_UINT8_EXPR,
+    NK_UINT16_EXPR,
+    NK_UINT32_EXPR,
+    NK_UINT64_EXPR,
+    NK_FLOAT16_EXPR,
+    NK_FLOAT32_EXPR,
+    NK_FLOAT64_EXPR,
+    NK_FLOAT80_EXPR
+)
 NK_TYPES: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('TYPE'))
 NK_SCOPES: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('SCOPE'))
 NK_STATEMENTS: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('STMT'))

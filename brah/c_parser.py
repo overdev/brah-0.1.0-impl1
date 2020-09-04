@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Tuple, Union
 from brah.constants.tokens import *
 from brah.constants.nodes import *
 from brah.b_lexer import *
-from brah.a_scanner import Source
+from brah.a_scanner import Source, SCN_DECDIGITS
 
 __all__ = [
     'Parser',
@@ -51,10 +51,10 @@ class ASTNode:
 
 class DeclNode(ASTNode):
 
-    def __init__(self, kind: NodeKind, name: str):
+    def __init__(self, kind: NodeKind, name: str, **kwargs):
         super(DeclNode, self).__init__(kind)
         self.name: str = name
-        self.type: Optional[TypeNode] = None
+        self.type: Optional[TypeNode] = kwargs.get('type')
         self.definition: Optional[ASTNode] = None
         self.initializer: Optional[ExprNode] = None
         self.scope: Optional[ScopeNode] = None
@@ -94,6 +94,8 @@ class ExprNode(ASTNode):
         self.nodes: Dict[str, Union[str, ExprNode]] = kwargs.copy()
         self.op: str = kwargs.get('op', '')
         self.value: str = kwargs.get('value', '0')
+        self.type: Optional[TypeNode] = kwargs.get('type')
+        self.constant: Optional[Union[int, float]] = kwargs.get('constant')
 
     def __getitem__(self, key) -> Union['ExprNode', 'DeclNode']:
         return self.nodes.__getitem__(key)
@@ -112,7 +114,7 @@ class TypeNode(ASTNode):
 
         # primitives
         self.integer: bool = kwargs.get('integer', True)
-        self.signed: bool = kwargs.get('signed', True) and self.integer
+        self.signed: bool = kwargs.get('signed', True)
 
         # pointers, arrays and classes
         self.base: Optional[TypeNode] = kwargs.get('base')
@@ -133,11 +135,9 @@ class TypeNode(ASTNode):
         if other.kind is self.kind:
             kind = self.kind
             if kind is NK_PRIMITIVE_TYPE:
-                if self.size < other.signed:
-                    return False
+                # if self.size < other.size:
+                #     return False
                 if self.signed != other.signed:
-                    return False
-                if self.integer != other.integer:
                     return False
             elif kind is NK_FUNCTION_TYPE:
                 if len(self.params) != len(other.params):
@@ -153,8 +153,9 @@ class TypeNode(ASTNode):
 
 
 class AssemblyNode(ASTNode):
-    types: Dict[str, ASTNode] = {
+    types: Dict[str, TypeNode] = {
         TY_VOID: TypeNode(NK_PRIMITIVE_TYPE, name=TY_VOID, signed=False, size=1, integer=True),
+        TY_BOOL: TypeNode(NK_PRIMITIVE_TYPE, name=TY_BOOL, signed=False, size=1, integer=True),
         TY_INT8: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT8, signed=True, size=1, integer=True),
         TY_INT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT16, signed=True, size=2, integer=True),
         TY_INT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT32, signed=True, size=4, integer=True),
@@ -163,10 +164,10 @@ class AssemblyNode(ASTNode):
         TY_UINT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT16, signed=False, size=2, integer=True),
         TY_UINT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT32, signed=False, size=4, integer=True),
         TY_UINT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT64, signed=False, size=8, integer=True),
-        TY_FLOAT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT16, signed=False, size=2, integer=False),
-        TY_FLOAT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT32, signed=False, size=4, integer=False),
-        TY_FLOAT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT64, signed=False, size=8, integer=False),
-        TY_FLOAT80: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT80, signed=False, size=10, integer=False),
+        TY_FLOAT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT16, signed=True, size=2, integer=False),
+        TY_FLOAT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT32, signed=True, size=4, integer=False),
+        TY_FLOAT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT64, signed=True, size=8, integer=False),
+        TY_FLOAT80: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT80, signed=True, size=10, integer=False),
     }
 
     def __init__(self, **kwargs):
@@ -184,10 +185,11 @@ class AssemblyNode(ASTNode):
 class ScopeNode(ASTNode):
     FRAME_OFFSET = 3
 
-    def __init__(self, kind: NodeKind, parent: Optional['ScopeNode'] = None, assembly: Optional[AssemblyNode] = None):
+    def __init__(self, kind: NodeKind, parent: Optional['ScopeNode'] = None, **kwargs):
         super(ScopeNode, self).__init__(kind)
-        self._assembly: Optional[AssemblyNode] = assembly
+        self._assembly: Optional[AssemblyNode] = kwargs.get('assembly')
         self.parent: Optional[ScopeNode] = parent
+        self.decl: Optional[DeclNode] = kwargs.get('decl')
         self.locals: Dict[str, DeclNode] = {}
         self.code: List[Union[StmtNode, DeclNode]] = []
         self.loopcounters: List[StmtNode] = []
@@ -298,6 +300,12 @@ class ScopeNode(ASTNode):
         else:
             return None
 
+    def find_type(self, name: str) -> Optional['TypeNode']:
+        module_scope = self.find_scope(NK_MODULE_SCOPE)
+        if name in module_scope.types:
+            return module_scope.types[name]
+        else:
+            return module_scope.assembly.types.get(name)
 
 class Parser:
     """Parser class
@@ -408,7 +416,102 @@ class Parser:
         return name
 
     @staticmethod
-    def parse_expr_operand(scope: ScopeNode, stream: TokenStream) -> ExprNode:
+    def parse_literal(token_kind: str, value: str) -> ExprNode:
+        value = value.lower()
+        suffix = value.strip(SCN_DECDIGITS + TT_DOT)
+        if suffix:
+            if suffix == SFX_INT8:
+                value_range = NK_INT8_EXPR
+                value_type = AssemblyNode.types[TY_INT8]
+                val = int(value.replace(suffix, ''), 10)
+            elif suffix == SFX_INT16:
+                value_range = NK_INT16_EXPR
+                value_type = AssemblyNode.types[TY_INT16]
+                val = int(value.replace(suffix, ''), 10)
+            elif suffix == SFX_INT32:
+                value_range = NK_INT32_EXPR
+                value_type = AssemblyNode.types[TY_INT32]
+                val = int(value.replace(suffix, ''), 10)
+            elif suffix == SFX_INT64:
+                value_range = NK_INT64_EXPR
+                value_type = AssemblyNode.types[TY_INT64]
+                val = int(value.replace(suffix, ''), 10)
+            elif suffix == SFX_UINT8:
+                value_range = NK_UINT8_EXPR
+                value_type = AssemblyNode.types[TY_UINT8]
+                val = int(value.replace(suffix, ''), 10)
+            elif suffix == SFX_UINT16:
+                value_range = NK_UINT16_EXPR
+                value_type = AssemblyNode.types[TY_UINT16]
+                val = int(value.replace(suffix, ''), 10)
+            elif suffix == SFX_UINT32:
+                value_range = NK_UINT32_EXPR
+                value_type = AssemblyNode.types[TY_UINT32]
+                val = int(value.replace(suffix, ''), 10)
+            elif suffix == SFX_UINT64:
+                value_range = NK_UINT64_EXPR
+                value_type = AssemblyNode.types[TY_UINT64]
+                val = int(value.replace(suffix, ''), 10)
+            elif suffix == SFX_FLOAT16:
+                value_range = NK_FLOAT16_EXPR
+                value_type = AssemblyNode.types[TY_FLOAT16]
+                val = float(value.replace(suffix, ''))
+            elif suffix == SFX_FLOAT32:
+                value_range = NK_FLOAT32_EXPR
+                value_type = AssemblyNode.types[TY_FLOAT32]
+                val = float(value.replace(suffix, ''))
+            elif suffix == SFX_FLOAT64:
+                value_range = NK_FLOAT64_EXPR
+                value_type = AssemblyNode.types[TY_FLOAT64]
+                val = float(value.replace(suffix, ''))
+            elif suffix == SFX_FLOAT80:
+                value_range = NK_FLOAT80_EXPR
+                value_type = AssemblyNode.types[TY_FLOAT80]
+                val = float(value.replace(suffix, ''))
+            else:
+                assert False, f"Invalid suffix '{suffix}'"
+        else:
+            if TT_DOT in value:
+                value_range = NK_FLOAT32_EXPR
+                value_type = AssemblyNode.types[TY_FLOAT32]
+                val = float(value.replace(suffix, ''))
+            else:
+                value_range = NK_INT32_EXPR
+                value_type = AssemblyNode.types[TY_INT32]
+                val = int(value.replace(suffix, ''), 10)
+
+        if token_kind == TT_INT:
+            error_msg = "Value out of range"
+            if value_range == NK_INT8_EXPR:
+                assert val <= 127, error_msg
+
+            elif value_range == NK_UINT8_EXPR:
+                assert val <= 255, error_msg
+
+            elif value_range == NK_INT16_EXPR:
+                assert val <= 32767, error_msg
+
+            elif value_range == NK_UINT16_EXPR:
+                assert val <= 65535, error_msg
+
+            elif value_range == NK_INT32_EXPR:
+                assert val <= 2147483647, error_msg
+
+            elif value_range == NK_UINT32_EXPR:
+                assert val <= 4294967295, error_msg
+
+            elif value_range == NK_INT64_EXPR:
+                assert val <= 9223372036854775807, error_msg
+
+            elif value_range == NK_UINT64_EXPR:
+                assert val <= 18446744073709551615, error_msg
+
+            else:
+                assert False, "Invalid value range."
+
+        return ExprNode(value_range, value=val, constant=val, type=value_type)
+
+    def parse_expr_operand(self, scope: ScopeNode, stream: TokenStream) -> ExprNode:
         """Parses a expression operand.
 
         :param scope: the current scope being parsed.
@@ -416,18 +519,15 @@ class Parser:
         :returns: the operand node.
         """
         token = stream.token_val
-        if stream.match_token(TT_INT):
-            return ExprNode(NK_INT32_EXPR, value=token)
-
-        elif stream.match_token(TT_FLOAT):
-            return ExprNode(NK_FLOAT32_EXPR, value=token)
+        if stream.is_token(TT_INT, TT_FLOAT):
+            return self.parse_literal(stream.get_kind(), token)
 
         elif stream.match_token(TT_NAME):
             node: DeclNode = scope.find(token)
             assert node, f"Undefined name '{token}'"
             node.read()
             node_kind = DECL_TO_EXPR.get(node.kind)
-            return ExprNode(node_kind, decl=node)
+            return ExprNode(node_kind, type=node.type, decl=node)
 
         else:
             stream.unexpected(TT_INT, TT_FLOAT, TT_NAME)
@@ -446,33 +546,49 @@ class Parser:
         if stream.is_token(TT_LPAREN):
             assert expr.kind is NK_FUNCTION_EXPR, f"{expr.kind} cannot be called as a function."
             decl: DeclNode = expr['decl']
-            args: List[ExprNode] = self.parse_expr_arguments(scope, stream)
+            args: List[ExprNode] = self.parse_expr_arguments(scope, decl, stream)
             name = decl.name
             nparams = len(decl.params)
             nargs = len(args)
             assert nparams == nargs, f"'{name}' function expects {nparams} arguments, but {nargs} were passed."
-            return ExprNode(NK_FCALL_EXPR, args=args, argc=nargs, decl=decl)
+            return ExprNode(NK_FCALL_EXPR, type=decl.type.result, args=args, argc=nargs, decl=decl)
         elif stream.is_any_operator(OP_INC, OP_DEC):
-            assert expr.kind not in (NK_INT32_EXPR, NK_INT64_EXPR), "Literal increment or decrement makes no sense."
             op = stream.get_val()
             kind = NK_INC_EXPR if op == OP_INC else NK_DEC_EXPR
+            what = 'Incrementing' if op == OP_INC else 'Decrementing'
+            assert expr.kind not in NK_LITERALS, f"{what} a literal is not OK."
+            assert expr.type.accepts(scope.find_type(TY_INT8 if expr.type.signed else TY_UINT8))
             return ExprNode(kind, pre=False, operand=expr)
         return expr
 
-    def parse_expr_arguments(self, scope: ScopeNode, stream: TokenStream) -> List[ExprNode]:
+    def parse_expr_arguments(self, scope: ScopeNode, func_node: DeclNode, stream: TokenStream) -> List[ExprNode]:
         """Parser a function's list of arguments.
 
         :param scope: the current scope being parsed.
         :param stream: the source stream of tokens.
         :returns: the list of arguments.
         """
-        args = []
+        func_type: TypeNode = func_node.type
+        func_params: List[TypeNode] = func_type.params
+        nparams: int = len(func_params)
+        nargs: int = 0
+        args: List[ExprNode] = []
         stream.expect(TT_LPAREN)
         if not stream.is_token(TT_RPAREN):
-            args.append(self.parse_expr(scope, stream))
+            arg = self.parse_expr(scope, stream)
+            args.append(arg)
+            nargs = 1
             while stream.match_token(TT_COMMA):
                 arg = self.parse_expr(scope, stream)
                 args.append(arg)
+                nargs += 1
+        assert nargs == nparams, f"'{func_node.name}' expects {nparams} arguments but {nargs} were passed."
+
+        for i, arg in enumerate(args):
+            param = func_params[i]
+            msg = f"Argument {i} of '{func_node.name}' expects {param.name} value but received a {arg.type.name}."
+            assert param.accepts(arg.type), msg
+
         stream.expect(TT_RPAREN)
         return args
 
@@ -490,11 +606,17 @@ class Parser:
         if stream.is_any_operator(OP_ADD, OP_SUB, OP_INC, OP_DEC):
             op = stream.get_val()
             if op in (OP_ADD, OP_SUB):
-                return ExprNode(NK_UNARY_EXPR, op=op, operand=self.parse_expr_base(scope, stream))
+                expr = self.parse_expr_base(scope, stream)
+                msg = f"{expr.type.name} does not have sign"
+                assert expr.type.kind is NK_PRIMITIVE_TYPE and expr.type.signed, msg
+                return ExprNode(NK_UNARY_EXPR, expr=expr.type, op=op, operand=expr)
             elif op in (OP_INC, OP_DEC):
                 kind = NK_INC_EXPR if op == OP_INC else NK_DEC_EXPR
                 expr = self.parse_expr_base(scope, stream)
-                return ExprNode(kind, pre=True, operand=expr)
+                what = 'Incrementing' if op == OP_INC else 'Decrementing'
+                assert expr.kind not in NK_LITERALS, f"{what} a literal is not OK."
+                assert expr.type.accepts(scope.find_type(TY_INT8 if expr.type.signed else TY_UINT8))
+                return ExprNode(kind, type=expr.type, pre=True, operand=expr)
         else:
             return self.parse_expr_base(scope, stream)
 
@@ -510,9 +632,10 @@ class Parser:
         """
         expr = self.parse_expr_unary(scope, stream)
         while stream.is_token(TT_MULT, TT_DIV, TT_MOD):
-            op = stream.token_val
-            stream.next()
-            return ExprNode(NK_BINARY_EXPR, op=op, left=expr, right=self.parse_expr_unary(scope, stream))
+            op = stream.get_val()
+            right = self.parse_expr_unary(scope, stream)
+            assert expr.type.accepts(right.type), f"Incompatible operand types in {op} expression."
+            return ExprNode(NK_BINARY_EXPR, type=expr.type, op=op, left=expr, right=right)
         return expr
 
     def parse_expr_add(self, scope: ScopeNode, stream) -> ExprNode:
@@ -527,9 +650,11 @@ class Parser:
         """
         expr = self.parse_expr_mul(scope, stream)
         while stream.is_token(TT_PLUS, TT_MINUS):
-            op = stream.token_val
-            stream.next()
-            return ExprNode(NK_BINARY_EXPR, op=op, left=expr, right=self.parse_expr_mul(scope, stream))
+            op = stream.get_val()
+            right = self.parse_expr_mul(scope, stream)
+            operands = f"({expr.type.name} and {right.type.name})"
+            assert expr.type.accepts(right.type), f"Incompatible operand types {operands} in {op} expression."
+            return ExprNode(NK_BINARY_EXPR, type=expr.type, op=op, left=expr, right=right)
         return expr
 
     def parse_expr_comp(self, scope: ScopeNode, stream: TokenStream) -> ExprNode:
@@ -543,12 +668,14 @@ class Parser:
         op = stream.token_val
         while stream.match_any_operator(OP_EQ, OP_NE, OP_LT, OP_LE, OP_GE, OP_GT):
             other = self.parse_expr_add(scope, stream)
-            expr = ExprNode(NK_COMPARISON_EXPR, op=op, left=expr, right=other)
+            expr_type = scope.find_type(TY_BOOL)
+            assert expr.type.accepts(other.type), f"Incompatible operand types in {op} expression."
+            expr = ExprNode(NK_COMPARISON_EXPR, type=expr_type, op=op, left=expr, right=other)
 
         return expr
 
     def parse_expr_and(self, scope: ScopeNode, stream: TokenStream) -> ExprNode:
-        """Parses a multiplicative expression.
+        """Parses a logic AND expression.
 
         :param scope: the current scope being parsed.
         :param stream: the source stream of tokens.
@@ -557,12 +684,14 @@ class Parser:
         expr = self.parse_expr_comp(scope, stream)
         while stream.match_keyword(KW_AND):
             other = self.parse_expr_comp(scope, stream)
-            expr = ExprNode(NK_LOGIC_EXPR, op=KW_AND, left=expr, right=other)
+            expr_type = scope.find_type(TY_BOOL)
+            assert expr.type.accepts(other.type), "Incompatible operand types in AND expression."
+            expr = ExprNode(NK_LOGIC_EXPR, type=expr_type, op=KW_AND, left=expr, right=other)
 
         return expr
 
     def parse_expr_or(self, scope: ScopeNode, stream: TokenStream) -> ExprNode:
-        """Parses a ? expression.
+        """Parses a logic OR expression.
 
         :param scope: the current scope being parsed.
         :param stream: the source stream of tokens.
@@ -571,7 +700,9 @@ class Parser:
         expr = self.parse_expr_and(scope, stream)
         while stream.match_keyword(KW_OR):
             other = self.parse_expr_and(scope, stream)
-            expr = ExprNode(NK_LOGIC_EXPR, op=KW_OR, left=expr, right=other)
+            expr_type = scope.find_type(TY_BOOL)
+            assert expr.type.accepts(other.type), "Incompatible operand types in OR expression."
+            expr = ExprNode(NK_LOGIC_EXPR, type=expr_type, op=KW_OR, left=expr, right=other)
 
         return expr
 
@@ -585,12 +716,14 @@ class Parser:
             stream.expect(TT_COLON)
             else_expr = self.parse_expr(scope, stream)
 
+            assert then_expr.type.accepts(else_expr.type), "Incompatible operand types in ternary expression."
+
             nodes = {
                 'cond_expr': expr,
                 'then_expr': then_expr,
                 'else_expr': else_expr
             }
-            expr = ExprNode(NK_TERNARY_EXPR, **nodes)
+            expr = ExprNode(NK_TERNARY_EXPR, type=then_expr.type, **nodes)
 
         return expr
 
@@ -672,12 +805,14 @@ class Parser:
         name = self.parse_name(stream)
         decl = DeclNode(NK_FUNCTION_DECL, name)
         assert scope.declare(name, decl, NK_MODULE_SCOPE), f"{name} already declared."
-        fscope: ScopeNode = ScopeNode(NK_FUNCTION_SCOPE, scope)
+        fscope: ScopeNode = ScopeNode(NK_FUNCTION_SCOPE, scope, decl=decl)
         decl.params = self.parse_decl_params(fscope, stream)
         stream.expect(TT_COLON)
-        decl.type = self.parse_type_spec(scope, stream)
+        rtype = self.parse_type_spec(scope, stream)
         decl.is_main = name == SW_MAINFUNCTION
         decl.definition = fscope
+        ptypes: List[TypeNode] = [p.type for p in decl.params]
+        decl.type = TypeNode(NK_FUNCTION_TYPE, name=name, size=rtype.size, result=rtype, params=ptypes)
         stream.expect(TT_LBRACE)
         self.parse_scope(fscope, stream)
         stream.expect(TT_RBRACE)
@@ -826,15 +961,16 @@ class Parser:
         stream.expect_keyword(KW_REPEAT)
         repeatscope: ScopeNode = ScopeNode(NK_LOOP_SCOPE, scope)
         if stream.is_token(TT_LPAREN):
+            counter_type = scope.find_type(TY_INT32)
             counter_max = scope.gen_name('max')
             counter_idx = scope.gen_name('idx')
-            decl_max = DeclNode(NK_VAR_DECL, counter_max)
-            decl_idx = DeclNode(NK_VAR_DECL, counter_idx)
+            decl_max = DeclNode(NK_VAR_DECL, counter_max, type=counter_type)
+            decl_idx = DeclNode(NK_VAR_DECL, counter_idx, type=counter_type)
             assert repeatscope.declare(counter_max, decl_max, NK_METHOD_SCOPE, NK_FUNCTION_SCOPE)
             assert repeatscope.declare(counter_idx, decl_idx, NK_METHOD_SCOPE, NK_FUNCTION_SCOPE)
             repeatscope.set_iteration(start=counter_idx, stop=counter_max)
             decl_max.initializer = self.parse_paren_expr(scope, stream)
-            decl_idx.initializer = ExprNode(NK_INT32_EXPR, value='0')
+            decl_idx.initializer = ExprNode(NK_INT32_EXPR, type=counter_type, constant=0, value='0')
             repeatscope.code.extend((decl_max, decl_idx))
             kind = NK_REPEAT_FINITE_STMT
         else:
@@ -907,10 +1043,18 @@ class Parser:
         :returns: the statement node.
         """
         stream.expect_keyword(KW_RETURN)
+        func_scope = scope.find_scope(NK_FUNCTION_SCOPE)
+        func_decl = func_scope.decl
         if not stream.is_token(TT_SEMI):
+            msg = f"'{func_decl.name}' function has no return value"
+            assert func_decl.type.result is not scope.find_type(TY_VOID), msg
             expr = self.parse_expr(scope, stream)
+            msg = f"'{func_decl.name}' function should return a value of type {func_decl.type.result.name}"
+            assert func_decl.type.result.accepts(expr.type), msg
         else:
-            expr = ExprNode(NK_INT32_EXPR, value='0')
+            msg = f"'{func_decl.name}' function should return a value of type {func_decl.type.result.name}"
+            assert func_decl.type.result is scope.find_type(TY_VOID), msg
+            expr = ExprNode(NK_INT32_EXPR, constant=0, value='0')
         stream.expect(TT_SEMI)
         return StmtNode(NK_RETURN_STMT, expr=expr)
 

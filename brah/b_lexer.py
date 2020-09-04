@@ -345,6 +345,7 @@ class Lexer:
         block: bool = False
         last_char = ''
         oper: str = ''
+        suffix = False
 
         def error(message: str):
             raise TokenError(f"ERROR at line {line}, column {column}: {message}.")
@@ -389,9 +390,17 @@ class Lexer:
 
             elif scan_mode == SM_NUMBER:
                 if char not in SCN_DECDIGITS:
-                    if char != '.':
+                    if char in SCN_ALPHA:
+                        suffix = True
+                    elif char != '.':
                         tokens.append(Tkn(TT_FLOAT if has_decimal else TT_INT, (line, column), slice(start, idx)))
+                        print(source[start: idx])
                         start = idx
+                        has_decimal = False
+                        suffix = False
+                elif suffix:
+                    error(f"Unexpected char '{char}'.")
+
                 if char in SCN_OPERATORS:
                     if char == '.':
                         if not has_decimal:
@@ -408,7 +417,10 @@ class Lexer:
 
                 elif char in SCN_WHITESPACE:
                     scan_mode = SM_NONE
-                elif char in SCN_ALPHA or char in SCN_QUOTATION:
+                elif char in SCN_ALPHA:
+                    suffix = True
+
+                elif char in SCN_QUOTATION:
                     error(f"Unexpected char '{char}'")
 
             elif scan_mode == SM_STRING:

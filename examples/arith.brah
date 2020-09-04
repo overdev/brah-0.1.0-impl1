@@ -8,16 +8,21 @@ função potência(x: real16, n: int8s): int8s {
 
 
 função hipotenusa(x: real16, y: real16): int8s {
-    var n: int8s = 2;
+    var n: int8s = 2u;
     retorne potência(x, n) + potência(y, n);
 }
 
+função inverso(x: real16): real16 {
+    retorne x * 2.5;
+}
 
-função principal(): int8s {
-    var x: real16 = 2.0;
-    var y: real16 = 3.0;
+
+função principal(): vazio {
+    var x: real16 = -2.0;
+    var y: real16 = -3.0;
 
     escreva hipotenusa(x, y);
+    escreva inverso(32);
 
-    retorne 0;
+    retorne;
 }
