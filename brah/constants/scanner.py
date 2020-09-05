@@ -1,4 +1,3 @@
-from typing import Optional, Any, Union, List, Tuple, Dict, Type
 
 __all__ = [
     'SCN_BINDIGITS',

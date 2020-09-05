@@ -26,6 +26,108 @@ Class        = "classe" NAME [ "extende" NAME ] [ "implementa" NAME ] ProtOrDef
 
 ```
 
+## Feature Tree
+
+```
+syntax: {
+    brazilian portuguese
+    identifiers with special caracters  
+}
+
+storage types {
+    typedef
+    constants
+    exceptions: {
+        index based exception tree
+    }
+    variables
+    enumerations: {
+        flagset counter
+    }
+    signatures
+    functions: {
+        default arguments
+        variable length argument number
+        templates
+        plataform invoke
+    }
+    interfaces
+    structures: {
+        methods
+        properties
+        overloads
+        operator overloads
+    }
+    classes: {
+        single inheritance
+        static fields, properties and methods
+        overrides
+        super calls
+        access modifiers
+    }
+}
+
+statements: {
+    import: {
+        source files: {
+            all names
+            specific names
+        }
+        pre-compiled libraries
+    }
+    if: {
+        then
+        then-else
+    }
+    while
+    do: {
+        with label
+        while
+        until
+    }
+    repeat:{
+        with label
+        finite
+        infinite
+    }
+    switch-case
+    for: {
+        with label
+        element in container
+        index, element in container
+        index of length
+    }
+    try: {
+        finally
+        catch-finally
+    }
+    raise
+    break: {
+        label
+    }
+    continue: {
+        label
+    }
+    return
+}
+
+expressions: {
+    ternary expressions
+    increment: {
+        pre
+        pos
+    }
+    decrement: {
+        pre
+        pos
+    }
+}
+
+```
+
+
+## Implementation Details
+
 ### Function Definition
 
 **Keywords**

@@ -1,9 +1,12 @@
 import random
 from typing import Optional, List, Dict, Tuple, Union
+
 from brah.constants.tokens import *
 from brah.constants.nodes import *
-from brah.b_lexer import *
+from brah.constants.errors import *
 from brah.a_scanner import Source, SCN_DECDIGITS
+from brah.b_lexer import *
+from brah.f_utils import error, assertion
 
 __all__ = [
     'Parser',
@@ -171,7 +174,6 @@ class AssemblyNode(ASTNode):
     }
 
     def __init__(self, **kwargs):
-        # assert kind in (NK_MODULE,)
         super(AssemblyNode, self).__init__(NK_NONE)
         self.modules: List[ScopeNode] = []
         self.target_fname: str = kwargs.get('target', '../output/out.brbc')
@@ -284,8 +286,10 @@ class ScopeNode(ASTNode):
 
         self.locals[name] = node
         base = self.find_scope(*expected_scopes)
-        scopes = ", nor outside of ".join(n.name for n in expected_scopes)
-        assert base, f"Can't declare {node.kind.name} outside of {scopes} scope."
+        # scopes = ", nor outside of ".join(n.name for n in expected_scopes)
+        # assert base, f"Can't declare {node.kind.name} outside of {scopes} scope."
+        if not base:
+            return False
         node.offset = base.offset
         node.scope = self
         base.offset += 1
@@ -306,6 +310,7 @@ class ScopeNode(ASTNode):
             return module_scope.types[name]
         else:
             return module_scope.assembly.types.get(name)
+
 
 class Parser:
     """Parser class
@@ -359,37 +364,52 @@ class Parser:
         """
         while True:
             if stream.is_keyword(KW_VARIABLE):
+                assertion(scope.find_scope(NK_FUNCTION_SCOPE),
+                          stream.token_loc, EK_SCOP, ERR_WRONG_STMT_SCOPE, KW_VARIABLE, 'function definition')
                 self.parse_decl_var(scope, stream)
 
             elif stream.is_keyword(KW_FUNCTION):
-                assert scope.parent is None, "Functions must be declared on top-level scope."
+                assertion(scope.parent is None, stream.token_loc, EK_SCOP, ERR_WRONG_DECL_SCOPE, 'Functions')
                 scope.code.append(self.parse_decl_function(scope, stream))
 
             elif stream.is_keyword(KW_IF):
+                assertion(scope.find_scope(NK_FUNCTION_SCOPE),
+                          stream.token_loc, EK_SCOP, ERR_WRONG_STMT_SCOPE, KW_IF, 'function definition')
                 scope.code.append(self.parse_stmt_if(scope, stream))
 
             elif stream.is_keyword(KW_WHILE):
+                assertion(scope.find_scope(NK_FUNCTION_SCOPE),
+                          stream.token_loc, EK_SCOP, ERR_WRONG_STMT_SCOPE, KW_WHILE, 'function definition')
                 scope.code.append(self.parse_stmt_while(scope, stream))
 
             elif stream.is_keyword(KW_DO):
+                assertion(scope.find_scope(NK_FUNCTION_SCOPE),
+                          stream.token_loc, EK_SCOP, ERR_WRONG_STMT_SCOPE, KW_DO, 'function definition')
                 scope.code.append(self.parse_stmt_do(scope, stream))
 
             elif stream.is_keyword(KW_REPEAT):
+                assertion(scope.find_scope(NK_FUNCTION_SCOPE),
+                          stream.token_loc, EK_SCOP, ERR_WRONG_STMT_SCOPE, KW_REPEAT, 'function definition')
                 scope.code.append(self.parse_stmt_repeat(scope, stream))
 
             elif stream.is_keyword(KW_PRINT):
+                assertion(scope.find_scope(NK_FUNCTION_SCOPE),
+                          stream.token_loc, EK_SCOP, ERR_WRONG_STMT_SCOPE, KW_PRINT, 'function definition')
                 scope.code.append(self.parse_stmt_print(scope, stream))
 
             elif stream.is_keyword(KW_RETURN):
-                assert scope.find_scope(NK_FUNCTION_SCOPE), "Return statement is ouside of function."
+                assertion(scope.find_scope(NK_FUNCTION_SCOPE),
+                          stream.token_loc, EK_SCOP, ERR_WRONG_STMT_SCOPE, KW_RETURN, 'function definition')
                 scope.code.append(self.parse_stmt_return(scope, stream))
 
             elif stream.is_keyword(KW_BREAK):
-                assert scope.find_scope(NK_LOOP_SCOPE, NK_CASE_SCOPE), "Return statement is ouside of function."
+                assertion(scope.find_scope(NK_LOOP_SCOPE, NK_CASE_SCOPE),
+                          stream.token_loc, EK_SCOP, ERR_WRONG_STMT_SCOPE, KW_BREAK, 'loop or switch statements')
                 scope.code.append(self.parse_stmt_break(scope, stream))
 
             elif stream.is_keyword(KW_CONTINUE):
-                assert scope.find_scope(NK_LOOP_SCOPE, NK_CASE_SCOPE), "Return statement is ouside of function."
+                assertion(scope.find_scope(NK_LOOP_SCOPE, NK_CASE_SCOPE),
+                          stream.token_loc, EK_SCOP, ERR_WRONG_STMT_SCOPE, KW_CONTINUE, 'loop or switch statements')
                 scope.code.append(self.parse_stmt_continue(scope, stream))
 
             elif stream.is_token(TT_NAME):
@@ -416,8 +436,11 @@ class Parser:
         return name
 
     @staticmethod
-    def parse_literal(token_kind: str, value: str) -> ExprNode:
+    def parse_literal(token: Tkn, value: str) -> ExprNode:
         value = value.lower()
+        value_range = NK_NONE
+        value_type = AssemblyNode.types[TY_VOID]
+        val = 0
         suffix = value.strip(SCN_DECDIGITS + TT_DOT)
         if suffix:
             if suffix == SFX_INT8:
@@ -469,7 +492,7 @@ class Parser:
                 value_type = AssemblyNode.types[TY_FLOAT80]
                 val = float(value.replace(suffix, ''))
             else:
-                assert False, f"Invalid suffix '{suffix}'"
+                error(token.location, EK_EXPR, ERR_INVALID_SUFFIX, suffix)
         else:
             if TT_DOT in value:
                 value_range = NK_FLOAT32_EXPR
@@ -480,34 +503,41 @@ class Parser:
                 value_type = AssemblyNode.types[TY_INT32]
                 val = int(value.replace(suffix, ''), 10)
 
-        if token_kind == TT_INT:
-            error_msg = "Value out of range"
+        if token.kind == TT_INT:
             if value_range == NK_INT8_EXPR:
-                assert val <= 127, error_msg
+                if not val <= 127:
+                    error(token.location, EK_EXPR, ERR_OUT_OF_RNG)
 
             elif value_range == NK_UINT8_EXPR:
-                assert val <= 255, error_msg
+                if not val <= 255:
+                    error(token.location, EK_EXPR, ERR_INVALID_SUFFIX)
 
             elif value_range == NK_INT16_EXPR:
-                assert val <= 32767, error_msg
+                if not val <= 32767:
+                    error(token.location, EK_EXPR, ERR_INVALID_SUFFIX)
 
             elif value_range == NK_UINT16_EXPR:
-                assert val <= 65535, error_msg
+                if not val <= 65535:
+                    error(token.location, EK_EXPR, ERR_INVALID_SUFFIX)
 
             elif value_range == NK_INT32_EXPR:
-                assert val <= 2147483647, error_msg
+                if not val <= 2147483647:
+                    error(token.location, EK_EXPR, ERR_INVALID_SUFFIX)
 
             elif value_range == NK_UINT32_EXPR:
-                assert val <= 4294967295, error_msg
+                if not val <= 4294967295:
+                    error(token.location, EK_EXPR, ERR_INVALID_SUFFIX)
 
             elif value_range == NK_INT64_EXPR:
-                assert val <= 9223372036854775807, error_msg
+                if not val <= 9223372036854775807:
+                    error(token.location, EK_EXPR, ERR_INVALID_SUFFIX)
 
             elif value_range == NK_UINT64_EXPR:
-                assert val <= 18446744073709551615, error_msg
+                if not val <= 18446744073709551615:
+                    error(token.location, EK_EXPR, ERR_INVALID_SUFFIX)
 
             else:
-                assert False, "Invalid value range."
+                assertion(False, token.location, EK_EXPR, ERR_OUT_OF_RNG)
 
         return ExprNode(value_range, value=val, constant=val, type=value_type)
 
@@ -520,11 +550,12 @@ class Parser:
         """
         token = stream.token_val
         if stream.is_token(TT_INT, TT_FLOAT):
-            return self.parse_literal(stream.get_kind(), token)
+            return self.parse_literal(stream.get(), token)
 
-        elif stream.match_token(TT_NAME):
+        elif stream.is_token(TT_NAME):
+            loc = stream.get().location
             node: DeclNode = scope.find(token)
-            assert node, f"Undefined name '{token}'"
+            assertion(node, loc, EK_DECL, ERR_UNDEFINED_NAME, token)
             node.read()
             node_kind = DECL_TO_EXPR.get(node.kind)
             return ExprNode(node_kind, type=node.type, decl=node)
@@ -544,20 +575,23 @@ class Parser:
         expr = self.parse_expr_operand(scope, stream)
 
         if stream.is_token(TT_LPAREN):
-            assert expr.kind is NK_FUNCTION_EXPR, f"{expr.kind} cannot be called as a function."
+            assertion(expr.kind is NK_FUNCTION_EXPR,
+                      stream.token_loc, EK_EXPR, ERR_NOT_CALLABLE, expr.type.name)
             decl: DeclNode = expr['decl']
             args: List[ExprNode] = self.parse_expr_arguments(scope, decl, stream)
-            name = decl.name
-            nparams = len(decl.params)
+            # name = decl.name
+            # nparams = len(decl.params)
             nargs = len(args)
-            assert nparams == nargs, f"'{name}' function expects {nparams} arguments, but {nargs} were passed."
             return ExprNode(NK_FCALL_EXPR, type=decl.type.result, args=args, argc=nargs, decl=decl)
         elif stream.is_any_operator(OP_INC, OP_DEC):
+            loc = stream.token_loc
             op = stream.get_val()
             kind = NK_INC_EXPR if op == OP_INC else NK_DEC_EXPR
             what = 'Incrementing' if op == OP_INC else 'Decrementing'
-            assert expr.kind not in NK_LITERALS, f"{what} a literal is not OK."
-            assert expr.type.accepts(scope.find_type(TY_INT8 if expr.type.signed else TY_UINT8))
+            assertion(expr.kind not in NK_LITERALS,
+                      loc, EK_EXPR, ERR_LITERAL_INCR_DECR, what)
+            assertion(expr.type.integer,
+                      loc, EK_EXPR, ERR_CANNOT_INCR_DECR, what, expr.type.name)
             return ExprNode(kind, pre=False, operand=expr)
         return expr
 
@@ -565,30 +599,39 @@ class Parser:
         """Parser a function's list of arguments.
 
         :param scope: the current scope being parsed.
+        :param func_node: the function whose arguments are being passed.
         :param stream: the source stream of tokens.
         :returns: the list of arguments.
         """
         func_type: TypeNode = func_node.type
         func_params: List[TypeNode] = func_type.params
         nparams: int = len(func_params)
-        nargs: int = 0
+        nargs = 0
         args: List[ExprNode] = []
+        index: int = 0
         stream.expect(TT_LPAREN)
         if not stream.is_token(TT_RPAREN):
+            loc = stream.token_loc
             arg = self.parse_expr(scope, stream)
             args.append(arg)
-            nargs = 1
+            nargs += 1
+            if nparams:
+                assertion(func_params[index].accepts(arg.type), loc, EK_TYPE, ERR_WRONG_ARG_TYPE,
+                          index, func_node.name, func_params[index].name, arg.type)
+            index += 1
             while stream.match_token(TT_COMMA):
+                loc = stream.token_loc
                 arg = self.parse_expr(scope, stream)
                 args.append(arg)
                 nargs += 1
-        assert nargs == nparams, f"'{func_node.name}' expects {nparams} arguments but {nargs} were passed."
+                if nparams > index:
+                    assertion(func_params[index].accepts(arg.type),
+                              loc, EK_TYPE, ERR_WRONG_ARG_TYPE,
+                              index, func_node.name, func_params[index].name, arg.type)
+                index += 1
 
-        for i, arg in enumerate(args):
-            param = func_params[i]
-            msg = f"Argument {i} of '{func_node.name}' expects {param.name} value but received a {arg.type.name}."
-            assert param.accepts(arg.type), msg
-
+        assertion(nparams == nargs, stream.token_loc, EK_STMT, ERR_WRONG_ARG_NUMBER,
+                  func_node.name, nparams, nargs)
         stream.expect(TT_RPAREN)
         return args
 
@@ -604,18 +647,21 @@ class Parser:
         :returns: the expression node.
         """
         if stream.is_any_operator(OP_ADD, OP_SUB, OP_INC, OP_DEC):
+            loc = stream.token_loc
             op = stream.get_val()
             if op in (OP_ADD, OP_SUB):
                 expr = self.parse_expr_base(scope, stream)
-                msg = f"{expr.type.name} does not have sign"
-                assert expr.type.kind is NK_PRIMITIVE_TYPE and expr.type.signed, msg
-                return ExprNode(NK_UNARY_EXPR, expr=expr.type, op=op, operand=expr)
+                assertion(expr.type.kind is NK_PRIMITIVE_TYPE and expr.type.signed,
+                          loc, EK_EXPR, ERR_NOT_SIGNED, expr.type.name)
+                return ExprNode(NK_UNARY_EXPR, type=expr.type, op=op, operand=expr)
             elif op in (OP_INC, OP_DEC):
                 kind = NK_INC_EXPR if op == OP_INC else NK_DEC_EXPR
                 expr = self.parse_expr_base(scope, stream)
                 what = 'Incrementing' if op == OP_INC else 'Decrementing'
-                assert expr.kind not in NK_LITERALS, f"{what} a literal is not OK."
-                assert expr.type.accepts(scope.find_type(TY_INT8 if expr.type.signed else TY_UINT8))
+                assertion(expr.kind not in NK_LITERALS,
+                          loc, EK_EXPR, ERR_LITERAL_INCR_DECR, what)
+                assertion(expr.type.integer,
+                          loc, EK_EXPR, ERR_CANNOT_INCR_DECR, what, expr.type.name)
                 return ExprNode(kind, type=expr.type, pre=True, operand=expr)
         else:
             return self.parse_expr_base(scope, stream)
@@ -632,9 +678,11 @@ class Parser:
         """
         expr = self.parse_expr_unary(scope, stream)
         while stream.is_token(TT_MULT, TT_DIV, TT_MOD):
+            loc = stream.token_loc
             op = stream.get_val()
             right = self.parse_expr_unary(scope, stream)
-            assert expr.type.accepts(right.type), f"Incompatible operand types in {op} expression."
+            operands = f"({expr.type.name} and {right.type.name})"
+            assertion(expr.type.accepts(right.type), loc, EK_TYPE, ERR_INCOMPATIBLE_TYPES, operands, op)
             return ExprNode(NK_BINARY_EXPR, type=expr.type, op=op, left=expr, right=right)
         return expr
 
@@ -650,10 +698,11 @@ class Parser:
         """
         expr = self.parse_expr_mul(scope, stream)
         while stream.is_token(TT_PLUS, TT_MINUS):
+            loc = stream.token_loc
             op = stream.get_val()
             right = self.parse_expr_mul(scope, stream)
             operands = f"({expr.type.name} and {right.type.name})"
-            assert expr.type.accepts(right.type), f"Incompatible operand types {operands} in {op} expression."
+            assertion(expr.type.accepts(right.type), loc, EK_TYPE, ERR_INCOMPATIBLE_TYPES, operands, op)
             return ExprNode(NK_BINARY_EXPR, type=expr.type, op=op, left=expr, right=right)
         return expr
 
@@ -665,12 +714,14 @@ class Parser:
         :returns: the expression node.
         """
         expr = self.parse_expr_add(scope, stream)
-        op = stream.token_val
-        while stream.match_any_operator(OP_EQ, OP_NE, OP_LT, OP_LE, OP_GE, OP_GT):
-            other = self.parse_expr_add(scope, stream)
+        while stream.is_any_operator(OP_EQ, OP_NE, OP_LT, OP_LE, OP_GE, OP_GT):
+            loc = stream.token_loc
+            op = stream.get_val()
+            right = self.parse_expr_add(scope, stream)
             expr_type = scope.find_type(TY_BOOL)
-            assert expr.type.accepts(other.type), f"Incompatible operand types in {op} expression."
-            expr = ExprNode(NK_COMPARISON_EXPR, type=expr_type, op=op, left=expr, right=other)
+            operands = f"({expr.type.name} and {right.type.name})"
+            assertion(expr.type.accepts(right.type), loc, EK_TYPE, ERR_INCOMPATIBLE_TYPES, operands, op)
+            expr = ExprNode(NK_COMPARISON_EXPR, type=expr_type, op=op, left=expr, right=right)
 
         return expr
 
@@ -685,7 +736,6 @@ class Parser:
         while stream.match_keyword(KW_AND):
             other = self.parse_expr_comp(scope, stream)
             expr_type = scope.find_type(TY_BOOL)
-            assert expr.type.accepts(other.type), "Incompatible operand types in AND expression."
             expr = ExprNode(NK_LOGIC_EXPR, type=expr_type, op=KW_AND, left=expr, right=other)
 
         return expr
@@ -701,7 +751,6 @@ class Parser:
         while stream.match_keyword(KW_OR):
             other = self.parse_expr_and(scope, stream)
             expr_type = scope.find_type(TY_BOOL)
-            assert expr.type.accepts(other.type), "Incompatible operand types in OR expression."
             expr = ExprNode(NK_LOGIC_EXPR, type=expr_type, op=KW_OR, left=expr, right=other)
 
         return expr
@@ -711,12 +760,14 @@ class Parser:
 
     def parse_expr_ternary(self, scope: ScopeNode, stream: TokenStream) -> ExprNode:
         expr = self.parse_expr_binary(scope, stream)
+        loc = stream.token_loc
         if stream.match_operator(OP_TER):
             then_expr = self.parse_expr(scope, stream)
             stream.expect(TT_COLON)
             else_expr = self.parse_expr(scope, stream)
 
-            assert then_expr.type.accepts(else_expr.type), "Incompatible operand types in ternary expression."
+            operands = f"({else_expr.type.name} and {then_expr.type.name})"
+            assertion(then_expr.type.accepts(else_expr.type), loc, EK_TYPE, ERR_INCOMPATIBLE_TYPES, operands, 'ternary')
 
             nodes = {
                 'cond_expr': expr,
@@ -766,7 +817,7 @@ class Parser:
             return self.parse_decl_var(scope, stream)
 
         elif stream.is_keyword(KW_FUNCTION):
-            assert scope.base_scope is NK_MODULE_SCOPE, "Functions must be declared in module level."
+            assertion(scope.base_scope is NK_MODULE_SCOPE, stream.token_loc, EK_SCOP, ERR_WRONG_DECL_SCOPE, 'Functions')
             return self.parse_decl_function(scope, stream)
 
     def parse_decl_var(self, scope: ScopeNode, stream: TokenStream) -> DeclNode:
@@ -777,6 +828,7 @@ class Parser:
         :returns: the variable declaration node.
         """
         stream.expect_keyword(KW_VARIABLE)
+        loc = stream.token_loc
         decl = self.parse_identifier(scope, stream)
         decl.kind = NK_VAR_DECL
         stream.expect(TT_COLON)
@@ -790,7 +842,8 @@ class Parser:
             expr = ExprNode(NK_UNDEFINED_EXPR)
         decl.initializer = expr
         stream.expect(TT_SEMI)
-        assert scope.declare(decl.name, decl, NK_FUNCTION_SCOPE, NK_METHOD_SCOPE), f"{decl.name} already declared."
+        declared = scope.declare(decl.name, decl, NK_FUNCTION_SCOPE, NK_METHOD_SCOPE)
+        assertion(declared, loc, EK_DECL, ERR_REDECLARED_NAME, decl.name)
 
         return decl
 
@@ -802,9 +855,11 @@ class Parser:
         :returns: the function declaration node.
         """
         stream.expect_keyword(KW_FUNCTION)
+        loc = stream.token_loc
         name = self.parse_name(stream)
         decl = DeclNode(NK_FUNCTION_DECL, name)
-        assert scope.declare(name, decl, NK_MODULE_SCOPE), f"{name} already declared."
+        declared = scope.declare(name, decl, NK_MODULE_SCOPE)
+        assertion(declared, loc, EK_DECL, ERR_REDECLARED_NAME, name)
         fscope: ScopeNode = ScopeNode(NK_FUNCTION_SCOPE, scope, decl=decl)
         decl.params = self.parse_decl_params(fscope, stream)
         stream.expect(TT_COLON)
@@ -851,32 +906,14 @@ class Parser:
         :param stream: the source stream of tokens.
         :returns: a parameter declaration node.
         """
+        loc = stream.token_loc
         decl = self.parse_identifier(scope, stream)
         decl.kind = NK_PARAM_DECL
         stream.expect(TT_COLON)
         decl.type = self.parse_type_spec(scope, stream)
-        assert scope.declare(decl.name, decl, NK_FUNCTION_SCOPE), f"{decl.name} already declared."
+        declared = scope.declare(decl.name, decl, NK_FUNCTION_SCOPE)
+        assertion(declared, loc, EK_DECL, ERR_REDECLARED_NAME, decl.name)
         return decl
-
-    def parse_stmt(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
-        """Parses a statement.
-
-        Statements allows for the manipulation of data, like value assignments,
-        execution branching and more.
-
-        :param scope: the current scope being parsed.
-        :param stream: the source stream of tokens.
-        :returns: the statement node.
-        """
-        if stream.is_keyword(KW_IF):
-            return self.parse_stmt_if(scope, stream)
-
-        elif stream.is_keyword(KW_PRINT):
-            return self.parse_stmt_print(scope, stream)
-
-        elif stream.is_keyword(KW_RETURN):
-            assert scope.find_scope(NK_FUNCTION_SCOPE), "Return statement is ouside of function."
-            return self.parse_stmt_return(scope, stream)
 
     def parse_stmt_if(self, scope: ScopeNode, stream: TokenStream) -> StmtNode:
         """Parses an `if` statement.
@@ -913,8 +950,10 @@ class Parser:
         whilescope: ScopeNode = ScopeNode(NK_LOOP_SCOPE, scope)
         label: str = scope.auto_define_label('.enqu')
         if stream.match(TT_COLON):
+            loc = stream.token_loc
             label = self.parse_name(stream)
-            assert funcscope.define_label(label), f"'{label}' label already declared in this definition"
+            defined = funcscope.define_label(label)
+            assertion(defined, loc, EK_DECL, ERR_REDECLARED_LABEL, label)
         funcscope.define_label(label)
         whilescope.set_label(KW_BREAK, label)
         whilescope.set_label(KW_CONTINUE, label)
@@ -935,8 +974,10 @@ class Parser:
         doscope: ScopeNode = ScopeNode(NK_LOOP_SCOPE, scope)
         label: str = scope.auto_define_label('.faca')
         if stream.match(TT_COLON):
+            loc = stream.token_loc
             label = self.parse_name(stream)
-            assert funcscope.define_label(label), f"'{label}' label already declared in this definition"
+            defined = funcscope.define_label(label)
+            assertion(defined, loc, EK_DECL, ERR_REDECLARED_LABEL, label)
         funcscope.define_label(label)
         doscope.set_label(KW_BREAK, label)
         doscope.set_label(KW_CONTINUE, label)
@@ -966,8 +1007,8 @@ class Parser:
             counter_idx = scope.gen_name('idx')
             decl_max = DeclNode(NK_VAR_DECL, counter_max, type=counter_type)
             decl_idx = DeclNode(NK_VAR_DECL, counter_idx, type=counter_type)
-            assert repeatscope.declare(counter_max, decl_max, NK_METHOD_SCOPE, NK_FUNCTION_SCOPE)
-            assert repeatscope.declare(counter_idx, decl_idx, NK_METHOD_SCOPE, NK_FUNCTION_SCOPE)
+            repeatscope.declare(counter_max, decl_max, NK_METHOD_SCOPE, NK_FUNCTION_SCOPE)
+            repeatscope.declare(counter_idx, decl_idx, NK_METHOD_SCOPE, NK_FUNCTION_SCOPE)
             repeatscope.set_iteration(start=counter_idx, stop=counter_max)
             decl_max.initializer = self.parse_paren_expr(scope, stream)
             decl_idx.initializer = ExprNode(NK_INT32_EXPR, type=counter_type, constant=0, value='0')
@@ -978,8 +1019,10 @@ class Parser:
             kind = NK_REPEAT_INFINITE_STMT
         label: str = scope.auto_define_label('.rept')
         if stream.match(TT_COLON):
+            loc = stream.token_loc
             label = self.parse_name(stream)
-            assert funcscope.define_label(label), f"'{label}' label already declared in this definition"
+            defined = funcscope.define_label(label)
+            assertion(defined, loc, EK_DECL, ERR_REDECLARED_LABEL, label)
         else:
             funcscope.auto_define_label(label)
         repeatscope.set_label(KW_BREAK, label)
@@ -996,13 +1039,14 @@ class Parser:
         :param stream: the source stream of tokens.
         :returns: the statement node.
         """
-        assert scope.find_scope(NK_LOOP_SCOPE, NK_CASE_SCOPE), "Invalid statement."
         funcscope: ScopeNode = scope.find_scope(NK_FUNCTION_SCOPE)
         stream.expect_keyword(KW_BREAK)
         label: Optional[str] = scope.get_label(KW_BREAK)
         if not stream.match(TT_SEMI):
+            loc = stream.token_loc
             label = self.parse_name(stream)
-            assert funcscope.has_label(label), f"'{label}' label is not declared in this definition"
+            defined = funcscope.has_label(label)
+            assertion(defined, loc, EK_DECL, ERR_REDECLARED_LABEL, label)
             stream.expect(TT_SEMI)
         return StmtNode(NK_BREAK_STMT, label=label)
 
@@ -1013,13 +1057,14 @@ class Parser:
         :param stream: the source stream of tokens.
         :returns: the statement node.
         """
-        assert scope.find_scope(NK_LOOP_SCOPE), "Invalid statement."
         funcscope: ScopeNode = scope.find_scope(NK_FUNCTION_SCOPE)
         stream.expect_keyword(KW_CONTINUE)
         label: Optional[str] = scope.get_label(KW_CONTINUE)
         if not stream.match(TT_SEMI):
+            loc = stream.token_loc
             label = self.parse_name(stream)
-            assert funcscope.has_label(label), f"'{label}' label is not declared in this definition"
+            defined = funcscope.has_label(label)
+            assertion(defined, loc, EK_DECL, ERR_REDECLARED_LABEL, label)
             stream.expect(TT_SEMI)
         return StmtNode(NK_CONTINUE_STMT, label=label)
 
@@ -1046,14 +1091,15 @@ class Parser:
         func_scope = scope.find_scope(NK_FUNCTION_SCOPE)
         func_decl = func_scope.decl
         if not stream.is_token(TT_SEMI):
-            msg = f"'{func_decl.name}' function has no return value"
-            assert func_decl.type.result is not scope.find_type(TY_VOID), msg
+            loc = stream.token_loc
+            assertion(func_decl.type.result is not scope.find_type(TY_VOID),
+                      stream.token.location, EK_DECL, ERR_NO_VOID_RETURN, func_decl.name)
             expr = self.parse_expr(scope, stream)
-            msg = f"'{func_decl.name}' function should return a value of type {func_decl.type.result.name}"
-            assert func_decl.type.result.accepts(expr.type), msg
+            assertion(func_decl.type.result.accepts(expr.type),
+                      loc, EK_TYPE, ERR_WRONG_RETURN_TYPE, func_decl.name, func_decl.type.result.name)
         else:
-            msg = f"'{func_decl.name}' function should return a value of type {func_decl.type.result.name}"
-            assert func_decl.type.result is scope.find_type(TY_VOID), msg
+            assertion(func_decl.type.result is scope.find_type(TY_VOID),
+                      stream.token.location, EK_DECL, ERR_VOID_RETURN, func_decl.name, func_decl.type.result.name)
             expr = ExprNode(NK_INT32_EXPR, constant=0, value='0')
         stream.expect(TT_SEMI)
         return StmtNode(NK_RETURN_STMT, expr=expr)
@@ -1065,16 +1111,17 @@ class Parser:
         :param stream: the source stream of tokens.
         :returns: the statement node.
         """
+        loc = stream.token_loc
         name = self.parse_name(stream)
         decl = scope.find(name)
-        assert decl, f"Undefined name '{name}'"
+        assertion(decl, loc, EK_DECL, ERR_UNDEFINED_NAME, name)
 
         if decl and decl.kind is NK_FUNCTION_DECL:
             args: List[ExprNode] = self.parse_expr_arguments(scope, stream)
             name = decl.name
             nparams = len(decl.params)
             nargs = len(args)
-            assert nparams == nargs, f"'{name}' function expects {nparams} arguments, but {nargs} were passed."
+            assertion(nparams == nargs, loc, EK_STMT, ERR_WRONG_ARG_NUMBER, name, nparams, nargs)
             stmt = ExprNode(NK_FCALL_EXPR, args=args, argc=nargs, decl=decl)
         else:
             if stream.match_token(TT_EQUAL):
@@ -1086,7 +1133,8 @@ class Parser:
                 kind = NK_INC_STMT if op == OP_INC else NK_DEC_STMT
                 stmt = StmtNode(kind, decl=decl)
             else:
-                assert False, "Invalid statement"
+                assertion(False, stream.token_loc, EK_STMT, ERR_INVALID_STMT)
+                assert False
 
         stream.expect(TT_SEMI)
         return stmt
@@ -1101,11 +1149,12 @@ class Parser:
 
     def parse_type_spec(self, scope: ScopeNode, stream: TokenStream) -> TypeNode:
         module = scope.find_scope(NK_MODULE_SCOPE)
-        assert module, "What happened to the module?"
+        assert module, "This is an error related to the language implementation."
+        loc = stream.token_loc
         base_name: str = self.parse_name(stream)
 
         type_decl = module.assembly.find(base_name)
-        assert type_decl, f"Undefined '{base_name}' type."
+        assertion(type_decl, loc, EK_DECL, ERR_UNDEFINED_NAME, base_name)
         return type_decl
 
     def parse_identifier(self, scope: ScopeNode, stream: TokenStream) -> DeclNode:

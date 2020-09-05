@@ -13,9 +13,10 @@ função hipotenusa(x: real16, y: real16): int8s {
 }
 
 função inverso(x: real16): real16 {
-    retorne x * 2.5;
+    retorne x * -1;
 }
 
+var s = 5;
 
 função principal(): vazio {
     var x: real16 = -2.0;

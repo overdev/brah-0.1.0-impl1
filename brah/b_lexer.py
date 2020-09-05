@@ -1,12 +1,15 @@
 from typing import List, Tuple, NamedTuple
 from brah.a_scanner import Source, Token
+from brah.f_utils import *
 from brah.constants.tokens import *
 from brah.constants.scanner import *
+from brah.constants.errors import *
 
 __all__ = [
     'TokenError',
     'TokenStream',
     'Lexer',
+    'Tkn',
 ]
 
 # ---------------------------------------------------------
@@ -70,6 +73,7 @@ class Tkn(NamedTuple):
     kind: str
     pos: Tuple[int, int]
     value: slice
+    location: Location
 
     def __str__(self):
         return f"[{self.kind}: {self.pos}]"
@@ -103,6 +107,11 @@ class TokenStream:
     def token_val(self) -> str:
         """Gets the current token value."""
         return self.src.src[self.tokens[self.idx].value]
+
+    @property
+    def token_loc(self) -> Location:
+        """Gets the current token location in source code."""
+        return self.token.location
 
     def next(self) -> Tkn:
         """Advances to the next token.
@@ -292,7 +301,8 @@ class TokenStream:
         """
         tokens = ' or '.join([t for t in expected])
         what = self.token.kind if self.token.kind != "\n" else "new line"
-        raise TokenError(f'Expected {tokens}, got \'{what}\'')
+        error(self.token.location, EK_SNTX, ERR_UNEXP_TOKEN, tokens, what)
+        # raise TokenError(f'Expected {tokens}, got \'{what}\'')
 
 
 class Lexer:
@@ -316,7 +326,7 @@ class Lexer:
         """
         print('Generatin tokens...')
         # self.tokens.append(Token(TK_EOF, '', *src.pos))
-        tokens = self._scan(src.src)
+        tokens = self._scan(src.src, src.filename)
         stream = TokenStream(tokens, src)
         # for t in tokens:
         #     print(t, src.src[t.value])
@@ -325,7 +335,7 @@ class Lexer:
         return stream
 
     @staticmethod
-    def _scan(source: str) -> List[Tkn]:
+    def _scan(source: str, fname: str = '<file>') -> List[Tkn]:
         """Traverses the source code string capturing all of its tokens.
 
         :param source: the source code string.
@@ -335,6 +345,8 @@ class Lexer:
         tokens: List[Tkn] = []
         line: int = 1
         column: int = 1
+        line_start: int = 0
+        line_end: int = source.find('\n')
 
         scan_mode: int = SM_NONE
         start: int = 0
@@ -347,8 +359,8 @@ class Lexer:
         oper: str = ''
         suffix = False
 
-        def error(message: str):
-            raise TokenError(f"ERROR at line {line}, column {column}: {message}.")
+        # def error(message: str):
+        #     raise TokenError(f"ERROR at line {line}, column {column}: {message}.")
 
         for idx, char in enumerate(source):
             # nxt = source[idx + 1] if idx < srclen else None
@@ -369,16 +381,19 @@ class Lexer:
                     oper = char
                 elif char in SCN_DELIMITERS:
                     scan_mode = SM_NONE
-                    tokens.append(Tkn(char, (line, column), slice(idx, idx + 1)))
+                    loc = Location(line_start, line_end, idx, idx + 1, line, fname, source)
+                    tokens.append(Tkn(char, (line, column), slice(idx, idx + 1), loc))
                     start = idx
 
             elif scan_mode == SM_NAME:
                 if char not in SCN_ALPHANUM:
-                    tokens.append(Tkn(TT_NAME, (line, column), slice(start, idx)))
+                    loc = Location(line_start, line_end, start, idx, line, fname, source)
+                    tokens.append(Tkn(TT_NAME, (line, column), slice(start, idx), loc))
                     start = idx
                 if char in SCN_DELIMITERS:
                     scan_mode = SM_NONE
-                    tokens.append(Tkn(char, (line, column), slice(idx, idx + 1)))
+                    loc = Location(line_start, line_end, idx, idx + 1, line, fname, source)
+                    tokens.append(Tkn(char, (line, column), slice(idx, idx + 1), loc))
                     start = idx
                 elif char in SCN_OPERATORS:
                     scan_mode = SM_OPERATOR
@@ -386,33 +401,37 @@ class Lexer:
                 elif char in SCN_WHITESPACE:
                     scan_mode = SM_NONE
                 elif char in SCN_QUOTATION:
-                    error(f"Unexpected char '{char}'.")
+                    loc = Location(line_start, line_end, start, idx + 1, line, fname, source)
+                    error(loc, EK_LEXR, ERR_UNEXP_CHAR, char)
 
             elif scan_mode == SM_NUMBER:
                 if char not in SCN_DECDIGITS:
                     if char in SCN_ALPHA:
                         suffix = True
                     elif char != '.':
-                        tokens.append(Tkn(TT_FLOAT if has_decimal else TT_INT, (line, column), slice(start, idx)))
-                        print(source[start: idx])
+                        loc = Location(line_start, line_end, start, idx, line, fname, source)
+                        tokens.append(Tkn(TT_FLOAT if has_decimal else TT_INT, (line, column), slice(start, idx), loc))
                         start = idx
                         has_decimal = False
                         suffix = False
                 elif suffix:
-                    error(f"Unexpected char '{char}'.")
+                    loc = Location(line_start, line_end, start, idx + 1, line, fname, source)
+                    error(loc, EK_LEXR, ERR_UNEXP_CHAR, char)
 
                 if char in SCN_OPERATORS:
                     if char == '.':
                         if not has_decimal:
                             has_decimal = True
                         else:
-                            error(f"Unexpected char '{char}'.")
+                            loc = Location(line_start, line_end, start, idx + 1, line, fname, source)
+                            error(loc, EK_LEXR, ERR_UNEXP_CHAR, char)
                     else:
                         scan_mode = SM_OPERATOR
                         oper = char
                 elif char in SCN_DELIMITERS:
                     scan_mode = SM_NONE
-                    tokens.append(Tkn(char, (line, column), slice(idx, idx + 1)))
+                    loc = Location(line_start, line_end, start, idx, line, fname, source)
+                    tokens.append(Tkn(char, (line, column), slice(idx, idx + 1), loc))
                     start = idx
 
                 elif char in SCN_WHITESPACE:
@@ -421,18 +440,21 @@ class Lexer:
                     suffix = True
 
                 elif char in SCN_QUOTATION:
-                    error(f"Unexpected char '{char}'")
+                    loc = Location(line_start, line_end, start, idx + 1, line, fname, source)
+                    error(loc, EK_LEXR, ERR_UNEXP_CHAR, char)
 
             elif scan_mode == SM_STRING:
                 if char == end_quote:
                     if not escaped:
-                        tokens.append(Tkn(TT_STR, (line, column), slice(start, idx + 1)))
+                        loc = Location(line_start, line_end, start, idx + 1, line, fname, source)
+                        tokens.append(Tkn(TT_STR, (line, column), slice(start, idx + 1), loc))
                         start = idx + 1
                         scan_mode = SM_NONE
                 escaped = char == '\\'
 
             elif scan_mode == SM_DELIM:
-                tokens.append(Tkn(char, (line, column), slice(idx, idx + 1)))
+                loc = Location(line_start, line_end, start, idx, line, fname, source)
+                tokens.append(Tkn(char, (line, column), slice(idx, idx + 1), loc))
                 start = idx
 
             elif scan_mode == SM_COMMENT:
@@ -457,7 +479,8 @@ class Lexer:
                         block = False
                         scan_mode = SM_COMMENT
                     else:
-                        tokens.append(Tkn(oper, (line, column), slice(start, idx)))
+                        loc = Location(line_start, line_end, start, idx, line, fname, source)
+                        tokens.append(Tkn(oper, (line, column), slice(start, idx), loc))
                         start = idx
                 if char in SCN_ALPHA:
                     scan_mode = SM_NAME
@@ -466,23 +489,27 @@ class Lexer:
                     start = idx
                 elif char in SCN_DELIMITERS:
                     scan_mode = SM_NONE
-                    tokens.append(Tkn(char, (line, column), slice(idx, idx + 1)))
+                    loc = Location(line_start, line_end, start, idx, line, fname, source)
+                    tokens.append(Tkn(char, (line, column), slice(idx, idx + 1), loc))
                     start = idx
                 elif char in SCN_WHITESPACE:
                     scan_mode = SM_NONE
                 else:
                     oper += char
                     if len(oper) > 3:
-                        error("Operator is too long.")
+                        loc = Location(line_start, line_end, start, idx + 1, line, fname, source)
+                        error(loc, EK_LEXR, ERR_OP_TOO_LONG)
 
             if char == '\n':
+                line_start = idx + 1
+                line_end = source.find('\n', line_start)
                 line += 1
                 column = 0
             else:
                 column += 1
 
-        for t in tokens:
-            print(t.kind, source[t.value])
+        # for t in tokens:
+        #     print(t.kind, source[t.value])
         return tokens
 
 # endregion (classes)
