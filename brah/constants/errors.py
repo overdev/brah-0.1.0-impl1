@@ -17,6 +17,14 @@ __all__ = [
     # Expression
     'ERR_INVALID_SUFFIX',
     'ERR_OUT_OF_RNG',
+    'ERR_NOT_CONSTEXPR',
+    'ERR_CONSTEXPR_CALL',
+    'ERR_CONSTEXPR_TERNARY',
+    'ERR_NOT_CALLABLE',
+    'ERR_LITERAL_INCR_DECR',
+    'ERR_CANNOT_INCR_DECR',
+    'ERR_NOT_SIGNED',
+    'ERR_DIVISION_BY_ZERO',
 
     # Declaration
     'ERR_UNDEFINED_NAME',
@@ -33,10 +41,6 @@ __all__ = [
     'ERR_WRONG_RETURN_TYPE',
     'ERR_WRONG_ARG_TYPE',
     'ERR_INCOMPATIBLE_TYPES',
-    'ERR_NOT_CALLABLE',
-    'ERR_LITERAL_INCR_DECR',
-    'ERR_CANNOT_INCR_DECR',
-    'ERR_NOT_SIGNED',
 
     # Scope
     'ERR_WRONG_DECL_SCOPE',
@@ -65,9 +69,13 @@ ERR_UNEXP_TOKEN = 'Expected {0}, got \'{1}\'.'
 ERR_INVALID_SUFFIX = "Invalid literal suffix '{0}'."
 ERR_OUT_OF_RNG = "Value out of range."
 ERR_NOT_CALLABLE = "{0} cannot be called."
+ERR_NOT_CONSTEXPR = "{0} is not a constant symbol."
+ERR_CONSTEXPR_CALL = "Constant expressions cannot have function calls."
+ERR_CONSTEXPR_TERNARY = "Constant expressions cannot have conditionals."
 ERR_LITERAL_INCR_DECR = "{0} a literal value is not OK."
 ERR_CANNOT_INCR_DECR = "{0} a {1} is not possible."
 ERR_NOT_SIGNED = "{0} does not have sign."
+ERR_DIVISION_BY_ZERO = "Division by zero in expression."
 
 # Declaration Errors
 ERR_UNDEFINED_NAME = "Undefined name '{0}'"

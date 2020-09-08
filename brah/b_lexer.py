@@ -223,6 +223,20 @@ class TokenStream:
         else:
             return False
 
+    def match_any_keyword(self, *keywords: str) -> bool:
+        """Returns whether the current token kind is one of the given kinds.
+
+        If the current token value matches, the stream advances to the next.
+
+        :param keywords: the keyword string to test against.
+        :returns: True if the token matches the keyword, False otherwise.
+        """
+        if self.is_some_keyword(*keywords):
+            self.next()
+            return True
+        else:
+            return False
+
     def match_operator(self, operator: str) -> bool:
         """Returns whether the current token kind is one of the given operator.
 

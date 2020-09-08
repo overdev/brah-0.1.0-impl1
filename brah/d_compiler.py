@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Union, cast, Any, Tuple
-from brah.constants.tokens import SW_MAINFUNCTION, KW_BREAK, KW_CONTINUE, OP_INC
+from brah.constants.tokens import SW_MAINFUNCTION, KW_BREAK, KW_CONTINUE
 from brah.constants.nodes import *
 from brah.constants.mnemonics import *
 from brah.c_parser import *
@@ -144,7 +144,7 @@ class Instruction:
         self.owner: Optional[CodeAddress] = None
 
     def __repr__(self):
-        return f"({self.opcode.name}, {self.size}, {self.label if self.label else '-'}, {bool(self.owner)}, [{self.address}])"
+        return f"({self.opcode.name}, {self.size}, {self.label if self.label else '-'}, [{self.address}])"
 
     @property
     def size(self) -> int:
@@ -190,10 +190,10 @@ class Instruction:
         for arg in self.args:
             if arg.value is None:
                 raise RuntimeError()
-            v = "{0:>4}".format(arg.value)
-            l = "{0:>4}".format(str(arg))
-            arg_vals = f"{arg_vals} {v}"
-            arg_labels = f"{arg_vals} {l}"
+            val = "{0:>4}".format(arg.value)
+            lbl = "{0:>4}".format(str(arg))
+            arg_vals = f"{arg_vals} {val}"
+            arg_labels = f"{arg_vals} {lbl}"
         arg_vals = "{0:14}".format(arg_vals)
         # arg_vals = " ".join(tuple( for arg in self.args))
         # arg_labels = " ".join(tuple("{0:>4}".format(str(arg)) for arg in self.args))
@@ -299,71 +299,13 @@ class Compiler:
 
     def __init__(self, fname: str):
         self.fname: str = fname
-        # self.ir: List[str] = [NOP.name, NOP.name]
         self.scope: Optional[ScopeNode] = None
         self.bin: List[int] = [NOP, NOP]
         self.rod: List[int] = []
-        # self.labels: Dict[str: int] = {}
-        # self.label_counter: int = -1
         self.func_decls: Dict[str, CodeAddress] = {}
         self.jump_stmts: Dict[str, CodeAddress] = {}
         code_addr = self.get_call_instr(SW_MAINFUNCTION)
         self.instructions = Instruction(0, CALL, code_addr, Constant(0), label=None)
-
-    #
-    # def get_label(self, prefix: str) -> str:
-    #     self.label_counter += 1
-    #     return f"{prefix}{bin(self.label_counter)[2:]}"
-    #
-    # def emit_label(self, label, offset: int = 0):
-    #     self.ir.append(f"${label}:")
-    #     self.labels[label] = len(self.bin) + offset
-    #
-    # def emit(self, op: Opcode, *args: str, **kwargs):
-    #     translate = kwargs.get('translate')
-    #     tabs = '\t' if len(args) == 2 else '\t\t'
-    #     tab = '\t'
-    #
-    #     if translate:
-    #         self.ir.append(f'{op.value}\t{tab.join(args)}{tabs}:: {op.name} {" ".join(translate)}')
-    #     else:
-    #         self.ir.append(f'{op.value}\t{tab.join(args)}{tabs}:: {op.name} {" ".join(args)}')
-    #
-    #     self.bin.append(op.value)
-    #     for arg in args:
-    #         self.bin.append(int(arg))
-    #
-    # @contextmanager
-    # def emit_jump(self, op: Opcode, label: str):
-    #     ir_idx = len(self.ir)
-    #     bin_idx = len(self.bin)
-    #     self.ir.append('')
-    #     self.bin.extend([op.value, 0])
-    #
-    #     yield
-    #
-    #     jump_label = self.get_label(label)
-    #     tabs = '\t\t'
-    #     addr = len(self.bin)
-    #
-    #     self.emit_label(jump_label, -2)
-    #     self.ir[ir_idx] = f'{op.value}\t{addr}{tabs}:: {op.name} {jump_label}'
-    #     self.bin[bin_idx: bin_idx + 1] = [op.value, addr]
-    #
-    # def emit_entrypoint(self, name: str):
-    #     self.bin[0] = JMP.value
-    #     self.bin[1] = self.labels[name]
-    #     del self.ir[:2]
-    #     self.ir.insert(0, f"{JMP.value}\t{self.labels[name]}\t:: {JMP.name} {name}")
-    #
-    # def print_ir(self):
-    #     addr = 0
-    #     for i in self.ir:
-    #         if i.startswith('$'):
-    #             print(i[1:])
-    #         else:
-    #             print(f"\t{addr}\t{i}")
-    #             addr += 1
 
     def get_call_instr(self, name: str) -> CodeAddress:
         if name not in self.func_decls:
@@ -399,7 +341,7 @@ class Compiler:
     def compile_ast(self):
         print('compiling ast...\n\n')
         instr = self.instructions.emit_after(HALT)
-        self.compile_scope(self.scope, None, instr)
+        self.compile_scope(self.scope, instr)
 
         print('generating bytecode..\n\n')
         self.bin = Instruction.bake_code(0, self.instructions)
@@ -413,15 +355,11 @@ class Compiler:
             Instruction.print_ir(0, self.instructions, file)
         print('finished.')
 
-    def compile_scope(self, scope: ScopeNode, label: Optional[str], instr: Instruction) -> Instruction:
-        # for name in scope.locals:
-        #     if scope.locals[name].kind is NK_VAR_DECL:
-        #         instr = self.compile_decl_var(scope.locals[name], instr)
-        for decl in scope.initializers:  # type: DeclNode
-            if decl.initializer:
-                instr = self.compile_expr(decl.initializer, instr)
-            # else:
-            #     instr = instr.emit_after(CONST_D, Constant(0))
+    def compile_scope(self, scope: ScopeNode, instr: Instruction) -> Instruction:
+        if scope.kind is not NK_MODULE_SCOPE:
+            for decl in scope.initializers:  # type: DeclNode
+                if decl.initializer:
+                    instr = self.compile_expr(decl.initializer, instr)
         return self.compile_block(scope, instr)
 
     def compile_block(self, block_node: ScopeNode, instr: Instruction) -> Instruction:
@@ -434,23 +372,14 @@ class Compiler:
                 instr = self.compile_expr_fcall(node, instr)
         return instr
 
-    def compile_decl(self, decl_node: DeclNode, instr: Instruction) -> Instruction:
-        if decl_node.kind is NK_VAR_DECL:
-            return self.compile_decl_var(decl_node, instr)
-
     def compile_decl_function(self, decl_node: DeclNode, instr: Instruction) -> Instruction:
-        # self.emit_label(decl_node.name)
-        # if decl_node.is_main:
-        #     self.emit_entrypoint(decl_node.name)
-        # instr = instr.emit_after_invalid(decl_node.name)
         code_addr: CodeAddress = self.get_call_instr(decl_node.name)
         instr = instr.insert_after(code_addr.instr)
-        instr = self.compile_scope(cast(ScopeNode, decl_node.definition), decl_node.name, instr)
+        instr = self.compile_scope(cast(ScopeNode, decl_node.definition), instr)
         return instr.emit_after(RET)
 
     def compile_decl_var(self, decl_node: DeclNode, instr: Instruction) -> Instruction:
         return self.compile_expr(cast(ExprNode, decl_node.initializer), instr)
-        # return instr.emit_after(SET, StackOffset(decl_node.offset))
 
     def compile_stmt(self, stmt_node: StmtNode, instr: Instruction) -> Instruction:
         if stmt_node.kind is NK_PRINT_STMT:
@@ -489,19 +418,19 @@ class Compiler:
 
     def compile_stmt_assign(self, stmt_node: StmtNode, instr: Instruction) -> Instruction:
         instr = self.compile_expr(stmt_node.nodes['expr'], instr)
-        return instr.emit_after(SET, StackOffset(stmt_node['decl'].offset))
+        return instr.emit_after(SET, StackOffset(stmt_node.decl.offset))
 
     def compile_stmt_incr(self, stmt_node: StmtNode, instr: Instruction) -> Instruction:
         instr = self.compile_expr(stmt_node.nodes['decl'], instr)
         op = INC if stmt_node.kind == NK_INC_STMT else DEC
-        return instr.emit_after(op, StackOffset(stmt_node['decl'].offset))
+        return instr.emit_after(op, StackOffset(stmt_node.decl.offset))
 
     def compile_stmt_ifthen(self, stmt_node: StmtNode, instr: Instruction) -> Instruction:
         instr = self.compile_expr(stmt_node['expr'], instr)
         label = 'end'
         i = instr.emit_after(JZ, CodeAddress(Instruction.invalid(label), label, True))
         jmp = i
-        i = self.compile_scope(stmt_node['thenscope'], None, i)
+        i = self.compile_scope(stmt_node['thenscope'], i)
         end = i.emit_after(NOP, label=label)
         jmp.args[0].value = end
         return end
@@ -513,10 +442,10 @@ class Compiler:
         then_tgt = Instruction.invalid(else_label)
         end_tgt = Instruction.invalid(end_label)
         then_jmp = instr.emit_after(JZ, CodeAddress(then_tgt, else_label, True))
-        instr = self.compile_scope(stmt_node['thenscope'], None, then_jmp)
+        instr = self.compile_scope(stmt_node['thenscope'], then_jmp)
         end_jmp = instr.emit_after(JMP, CodeAddress(end_tgt, end_label, True))
         instr = end_jmp.insert_after(then_tgt)
-        instr = self.compile_scope(stmt_node['elsescope'], None, instr)
+        instr = self.compile_scope(stmt_node['elsescope'], instr)
         return instr.insert_after(end_tgt)
 
     def compile_stmt_while(self, stmt_node: StmtNode, instr: Instruction) -> Instruction:
@@ -532,7 +461,7 @@ class Compiler:
         instr = instr.insert_after(start.instr)
         instr = self.compile_expr(stmt_node['expr'], instr)
         instr = instr.emit_after(JZ, end)
-        instr = self.compile_scope(whilescope, None, instr)
+        instr = self.compile_scope(whilescope, instr)
         instr = instr.emit_after(JMP, start)
         return instr.insert_after(end.instr)
 
@@ -540,7 +469,7 @@ class Compiler:
         start: CodeAddress = self.get_jump(stmt_node.label)
 
         instr = instr.insert_after(start.instr)
-        instr = self.compile_scope(stmt_node['doscope'], None, instr)
+        instr = self.compile_scope(stmt_node['doscope'], instr)
         instr = self.compile_expr(stmt_node['expr'], instr)
         return instr.emit_after(JNZ, start)
 
@@ -548,7 +477,7 @@ class Compiler:
         start: CodeAddress = self.get_jump(stmt_node.label)
 
         instr = instr.insert_after(start.instr)
-        instr = self.compile_scope(stmt_node['doscope'], None, instr)
+        instr = self.compile_scope(stmt_node['doscope'], instr)
         instr = self.compile_expr(stmt_node['expr'], instr)
         return instr.emit_after(JZ, start)
 
@@ -569,7 +498,7 @@ class Compiler:
             instr = instr.emit_after(GT)
             instr = instr.emit_after(JZ, end)
 
-        instr = self.compile_scope(scope, None, instr)
+        instr = self.compile_scope(scope, instr)
         if has_counter:
             idx_node: DeclNode = scope.locals[scope.iteration['start']]
             instr = instr.emit_after(INC, StackOffset(idx_node.offset))
@@ -615,6 +544,8 @@ class Compiler:
             instr = self.compile_expr_f80(expr_node, instr)
         elif expr_node.kind is NK_VAR_EXPR:
             instr = self.compile_expr_var(expr_node, instr)
+        elif expr_node.kind is NK_CONSTANT_EXPR:
+            instr = self.compile_expr_constant(expr_node, instr)
         elif expr_node.kind is NK_PARAM_EXPR:
             instr = self.compile_expr_param(expr_node, instr)
         elif expr_node.kind is NK_FCALL_EXPR:
@@ -644,50 +575,67 @@ class Compiler:
         }.get(expr_node.op, '?')
         return instr.emit_after(opcode)
 
-    def compile_expr_i8(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_i8(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_SB, Constant(expr_node.constant))
 
-    def compile_expr_i16(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_i16(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_SW, Constant(expr_node.constant))
 
-    def compile_expr_i32(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_i32(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_SD, Constant(expr_node.constant))
 
-    def compile_expr_i64(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_i64(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_SQ, Constant(expr_node.constant))
 
-    def compile_expr_u8(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_u8(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_B, Constant(expr_node.constant))
 
-    def compile_expr_u16(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_u16(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_W, Constant(expr_node.constant))
 
-    def compile_expr_u32(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_u32(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_D, Constant(expr_node.constant))
 
-    def compile_expr_u64(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_u64(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_Q, Constant(expr_node.constant))
 
-    def compile_expr_f16(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_f16(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_FH, Constant(expr_node.constant))
 
-    def compile_expr_f32(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_f32(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_FS, Constant(expr_node.constant))
 
-    def compile_expr_f64(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_f64(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_FD, Constant(expr_node.constant))
 
-    def compile_expr_f80(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    @staticmethod
+    def compile_expr_f80(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(CONST_FX, Constant(expr_node.constant))
 
-    def compile_expr_var(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(GET, StackOffset(expr_node['decl'].offset))
+    @staticmethod
+    def compile_expr_var(expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(GET, StackOffset(expr_node.decl.offset))
 
-    def compile_expr_param(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(GET, StackOffset(expr_node['decl'].offset))
+    def compile_expr_constant(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return self.compile_expr(expr_node.decl.initializer, instr)
+
+    @staticmethod
+    def compile_expr_param(expr_node: ExprNode, instr: Instruction) -> Instruction:
+        return instr.emit_after(GET, StackOffset(expr_node.decl.offset))
 
     def compile_expr_fcall(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        name = expr_node['decl'].name
+        name = expr_node.decl.name
         code_addr = self.get_call_instr(name)
         # pointer = self.labels[name]
         argc = cast(int, expr_node['argc'])

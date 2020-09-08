@@ -2,8 +2,8 @@
 __all__ = [
     'SCN_BINDIGITS',
     'SCN_OCTDIGITS',
-    'SCN_DECDIGITS',
     'SCN_HEXDIGITS',
+    'SCN_DECDIGITS',
     'SCN_ALPHA',
     'SCN_ALPHANUM',
     'SCN_WHITESPACE',

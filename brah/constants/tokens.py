@@ -20,6 +20,7 @@ __all__ = [
     'SW_MAINFUNCTION',
 
     'KW_VARIABLE',
+    'KW_CONSTANT',
     'KW_IF',
     'KW_ELSE',
     'KW_PRINT',
@@ -125,6 +126,7 @@ __all__ = [
 SW_MAINFUNCTION = 'principal'
 
 KW_VARIABLE = "var"
+KW_CONSTANT = "constante"
 KW_IF = "se"
 KW_ELSE = "senão"
 KW_PRINT = "escreva"

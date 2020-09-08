@@ -23,7 +23,7 @@ def error(location: 'Location', kind: str, message: str, *args, **kwargs):
         del kwargs['debug']
     msg = location.format_error(kind, message, *args, **kwargs)
     if debug:
-        assert False, message.format(*args, **kwargs)
+        assert False, msg.format(*args, **kwargs)
     else:
         print(msg, file=sys.stderr)
         exit(0)

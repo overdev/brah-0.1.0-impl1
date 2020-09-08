@@ -1,4 +1,5 @@
 from enum import IntEnum, auto
+from typing import Tuple
 
 __all__ = [
     'NodeKind',
@@ -20,6 +21,8 @@ __all__ = [
     'NK_FUNCTION_EXPR',
     'NK_FCALL_EXPR',
     'NK_VAR_EXPR',
+    'NK_CONSTANT_EXPR',
+    'NK_CONSTEXPR_EXPR',
     'NK_PARAM_EXPR',
     'NK_OPERAND_EXPR',
     'NK_UNARY_EXPR',
@@ -33,6 +36,7 @@ __all__ = [
     'NK_NAME',
     'NK_FUNCTION_DECL',
     'NK_VAR_DECL',
+    'NK_CONSTANT_DECL',
     'NK_PARAM_DECL',
     'NK_ASSIGN_STMT',
     'NK_INC_STMT',
@@ -73,6 +77,11 @@ __all__ = [
     'NK_CLASS_TYPE',
     'NK_TYPE',
 
+    'NK_SIGNED_EXPR',
+    'NK_UNSIGNED_EXPR',
+    'NK_INTEGER_EXPR',
+    'NK_FLOAT_EXPR',
+
     'NK_TYPES',
     'NK_SCOPES',
     'NK_LITERALS',
@@ -83,7 +92,6 @@ __all__ = [
 
 # ---------------------------------------------------------
 # region CONSTANTS & ENUMS
-from typing import Tuple
 
 
 class NodeKind(IntEnum):
@@ -105,6 +113,8 @@ class NodeKind(IntEnum):
     FUNCTION_EXPR = auto()
     FCALL_EXPR = auto()
     VAR_EXPR = auto()
+    CONSTANT_EXPR = auto()
+    CONSTEXPR_EXPR = auto()
     PARAM_EXPR = auto()
     OPERAND_EXPR = auto()
     UNARY_EXPR = auto()
@@ -118,6 +128,7 @@ class NodeKind(IntEnum):
     NAME = auto()
     FUNCTION_DECL = auto()
     VAR_DECL = auto()
+    CONSTANT_DECL = auto()
     PARAM_DECL = auto()
     ASSIGN_STMT = auto()
     INC_STMT = auto()
@@ -177,6 +188,8 @@ NK_UNDEFINED_EXPR = NodeKind.UNDEFINED_EXPR
 NK_FUNCTION_EXPR = NodeKind.FUNCTION_EXPR
 NK_FCALL_EXPR = NodeKind.FCALL_EXPR
 NK_VAR_EXPR = NodeKind.VAR_EXPR
+NK_CONSTANT_EXPR = NodeKind.CONSTANT_EXPR
+NK_CONSTEXPR_EXPR = NodeKind.CONSTEXPR_EXPR
 NK_PARAM_EXPR = NodeKind.PARAM_EXPR
 NK_OPERAND_EXPR = NodeKind.OPERAND_EXPR
 NK_UNARY_EXPR = NodeKind.UNARY_EXPR
@@ -190,6 +203,7 @@ NK_EXPR = NodeKind.EXPR
 NK_NAME = NodeKind.NAME
 NK_FUNCTION_DECL = NodeKind.FUNCTION_DECL
 NK_VAR_DECL = NodeKind.VAR_DECL
+NK_CONSTANT_DECL = NodeKind.CONSTANT_DECL
 NK_PARAM_DECL = NodeKind.PARAM_DECL
 NK_ASSIGN_STMT = NodeKind.ASSIGN_STMT
 NK_INC_STMT = NodeKind.INC_STMT
@@ -244,6 +258,30 @@ NK_LITERALS: Tuple[NodeKind, ...] = (
     NK_FLOAT64_EXPR,
     NK_FLOAT80_EXPR
 )
+
+NK_SIGNED_EXPR = (
+    NK_INT8_EXPR,
+    NK_INT16_EXPR,
+    NK_INT32_EXPR,
+    NK_INT64_EXPR
+)
+
+NK_UNSIGNED_EXPR = (
+    NK_UINT8_EXPR,
+    NK_UINT16_EXPR,
+    NK_UINT32_EXPR,
+    NK_UINT64_EXPR
+)
+
+NK_INTEGER_EXPR = NK_SIGNED_EXPR + NK_UNSIGNED_EXPR
+
+NK_FLOAT_EXPR = (
+    NK_FLOAT16_EXPR,
+    NK_FLOAT32_EXPR,
+    NK_FLOAT64_EXPR,
+    NK_FLOAT80_EXPR
+)
+
 NK_TYPES: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('TYPE'))
 NK_SCOPES: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('SCOPE'))
 NK_STATEMENTS: Tuple[NodeKind, ...] = tuple(nk for nk in NodeKind if nk.name.endswith('STMT'))
