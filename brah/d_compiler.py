@@ -184,9 +184,6 @@ class Instruction:
         opcode = "{0:>4}".format(self.opcode.value)
         arg_vals = " "
         arg_labels = " "
-        # for a in self.args:
-        #     if isinstance(a, CodeAddress):
-        #         print(a.value)
         for arg in self.args:
             if arg.value is None:
                 raise RuntimeError()
@@ -195,8 +192,6 @@ class Instruction:
             arg_vals = f"{arg_vals} {val}"
             arg_labels = f"{arg_vals} {lbl}"
         arg_vals = "{0:14}".format(arg_vals)
-        # arg_vals = " ".join(tuple( for arg in self.args))
-        # arg_labels = " ".join(tuple("{0:>4}".format(str(arg)) for arg in self.args))
 
         result = f"{label}\t{address} {opcode} {arg_vals} :: {self.opcode.name} {arg_labels}"
         return result
@@ -566,7 +561,6 @@ class Compiler:
             '*': MUL, '/': DIV, '%': MOD
         }.get(expr_node.op, '?')
         return instr.emit_after(opcode)
-        # self.emit(opcode)
 
     def compile_expr_unary(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
         instr = self.compile_expr(expr_node['operand'], instr)
@@ -642,7 +636,6 @@ class Compiler:
         for arg_node in expr_node['args']:  # type: ExprNode
             instr = self.compile_expr(arg_node, instr)
         return instr.emit_after(CALL, code_addr, Constant(argc))
-        # self.emit(CALL, str(pointer), argc, translate=[name, argc])
 
     def compile_expr_incr(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
         instr = self.compile_expr(expr_node['operand'], instr)
@@ -658,7 +651,6 @@ class Compiler:
             '==': EQ, '!=': NE,
         }.get(expr_node.op, '?')
         return instr.emit_after(opcode)
-        # self.emit(opcode)
 
 # endregion (classes)
 # ---------------------------------------------------------
