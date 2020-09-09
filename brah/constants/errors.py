@@ -25,6 +25,7 @@ __all__ = [
     'ERR_CANNOT_INCR_DECR',
     'ERR_NOT_SIGNED',
     'ERR_DIVISION_BY_ZERO',
+    'ERR_WRONG_CONSTEXPR_TYPE',
 
     # Declaration
     'ERR_UNDEFINED_NAME',
@@ -32,6 +33,7 @@ __all__ = [
     'ERR_REDECLARED_LABEL',
     'ERR_VOID_RETURN',
     'ERR_NO_VOID_RETURN',
+    'ERR_INTEGER_ENUM',
 
     # Statement
     'ERR_WRONG_ARG_NUMBER',
@@ -63,7 +65,7 @@ ERR_UNEXP_CHAR = "Unexpected char '{0}'."
 ERR_OP_TOO_LONG = "Operator is too long."
 
 # Syntax Errors
-ERR_UNEXP_TOKEN = 'Expected {0}, got \'{1}\'.'
+ERR_UNEXP_TOKEN = "Expected {0}, got '{1}'."
 
 # Expression Errors
 ERR_INVALID_SUFFIX = "Invalid literal suffix '{0}'."
@@ -76,6 +78,7 @@ ERR_LITERAL_INCR_DECR = "{0} a literal value is not OK."
 ERR_CANNOT_INCR_DECR = "{0} a {1} is not possible."
 ERR_NOT_SIGNED = "{0} does not have sign."
 ERR_DIVISION_BY_ZERO = "Division by zero in expression."
+ERR_WRONG_CONSTEXPR_TYPE = "Constant expression does not evaluates to {0} type."
 
 # Declaration Errors
 ERR_UNDEFINED_NAME = "Undefined name '{0}'"
@@ -83,6 +86,7 @@ ERR_REDECLARED_NAME = "'{0}' name is already declared."
 ERR_REDECLARED_LABEL = "'{0}' label already declared in this definition."
 ERR_VOID_RETURN = "'{0}' function has a return value of type {1}."
 ERR_NO_VOID_RETURN = "'{0}' function has no return value."
+ERR_INTEGER_ENUM = "Enumeration base type must be integer."
 
 # Statement Errors
 ERR_WRONG_ARG_NUMBER = "'{0}' function expects {1} arguments, but {2} were passed."

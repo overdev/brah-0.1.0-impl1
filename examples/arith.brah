@@ -1,9 +1,13 @@
 
 constante PI: real32 = 3.14159265359r;
 
-constante FiveRad: real32 = 5r * PI / 180.0r;
+constante FIVERAD: real32 = 5r * PI / 180.0r;
 
 constante TESTE: int32d = 25i + 10i;
+
+enumeração Dias: int8s {
+    DOM, SEG, TER=20, QUA, QUI, SEX, SAB
+}
 
 função potência(x: real16, n: int8s): int8s {
     repita (n - 1) {
@@ -22,13 +26,18 @@ função inverso(x: real16): real16 {
     retorne x * -1;
 }
 
+função algo(x: Dias, y: int32s): vazio {
+    escreva y + x;
+}
+
 função principal(): vazio {
     var x: real16 = -2.0;
     var y: real16 = -3.0;
+    var z: int32s = QUI * 7;
 
     escreva hipotenusa(x, y);
     escreva inverso(PI);
-    escreva TESTE;
+    escreva SAB;
 
     retorne;
 }

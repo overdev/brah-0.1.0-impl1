@@ -26,6 +26,7 @@ DECL_TO_EXPR = {
     NK_VAR_DECL: NK_VAR_EXPR,
     NK_PARAM_DECL: NK_PARAM_EXPR,
     NK_CONSTANT_DECL: NK_CONSTANT_EXPR,
+    NK_ENUMERATION_DECL: NK_ENUMERATION_EXPR,
     NK_FUNCTION_DECL: NK_FUNCTION_EXPR
 }
 
@@ -156,6 +157,11 @@ class TypeNode(ASTNode):
         # primitives
         self.integer: bool = kwargs.get('integer', True)
         self.signed: bool = kwargs.get('signed', True)
+        self.expr_kind: NodeKind = kwargs.get('expr_kind', NK_NONE)
+
+        # enumerations
+        self.flagset: bool = kwargs.get('flagset')
+        self.members: List[DeclNode] = kwargs.get('members')
 
         # pointers, arrays and classes
         self.base: Optional[TypeNode] = kwargs.get('base')
@@ -170,7 +176,7 @@ class TypeNode(ASTNode):
         # interfaces, structures and classes
         self.fields: List[TypeNode] = kwargs.get('fields', [])
         self.methods: List[TypeNode] = kwargs.get('methods', [])
-        self.operators: List[TypeNode] = kwargs.get('methods', [])
+        self.operators: List[TypeNode] = kwargs.get('operators', [])
 
         # classes
         self.implements: List[TypeNode] = []
@@ -179,8 +185,8 @@ class TypeNode(ASTNode):
         self.interfaces: Dict[str, bool] = {}
 
     def accepts(self, other: 'TypeNode') -> bool:
+        kind = self.kind
         if other.kind is self.kind:
-            kind = self.kind
             if kind is NK_PRIMITIVE_TYPE:
                 # if self.size < other.size:
                 #     return False
@@ -195,26 +201,39 @@ class TypeNode(ASTNode):
                     if not self.params[i].accepts(other.params[i]):
                         return False
             return True
-        else:
-            return False
+        elif kind is NK_PRIMITIVE_TYPE:
+            return self.accepts(other.base)
+        elif kind is NK_ENUMERATION_TYPE:
+            return self.base.accepts(other)
 
 
 class AssemblyNode(ASTNode):
     types: Dict[str, TypeNode] = {
-        TY_VOID: TypeNode(NK_PRIMITIVE_TYPE, name=TY_VOID, signed=False, size=1, integer=True),
-        TY_BOOL: TypeNode(NK_PRIMITIVE_TYPE, name=TY_BOOL, signed=False, size=1, integer=True),
-        TY_INT8: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT8, signed=True, size=1, integer=True),
-        TY_INT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT16, signed=True, size=2, integer=True),
-        TY_INT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT32, signed=True, size=4, integer=True),
-        TY_INT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT64, signed=True, size=8, integer=True),
-        TY_UINT8: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT8, signed=False, size=1, integer=True),
-        TY_UINT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT16, signed=False, size=2, integer=True),
-        TY_UINT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT32, signed=False, size=4, integer=True),
-        TY_UINT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT64, signed=False, size=8, integer=True),
-        TY_FLOAT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT16, signed=True, size=2, integer=False),
-        TY_FLOAT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT32, signed=True, size=4, integer=False),
-        TY_FLOAT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT64, signed=True, size=8, integer=False),
-        TY_FLOAT80: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT80, signed=True, size=10, integer=False),
+        TY_VOID: TypeNode(NK_PRIMITIVE_TYPE, name=TY_VOID, signed=False, size=1, integer=True, expr_kind=NK_NONE),
+        TY_BOOL: TypeNode(NK_PRIMITIVE_TYPE, name=TY_BOOL, signed=False, size=1, integer=True, expr_kind=NK_BOOL_EXPR),
+        TY_INT8: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT8, signed=True, size=1, integer=True, expr_kind=NK_INT8_EXPR),
+        TY_INT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT16, signed=True, size=2, integer=True,
+                           expr_kind=NK_INT16_EXPR),
+        TY_INT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT32, signed=True, size=4, integer=True,
+                           expr_kind=NK_INT32_EXPR),
+        TY_INT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_INT64, signed=True, size=8, integer=True,
+                           expr_kind=NK_INT64_EXPR),
+        TY_UINT8: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT8, signed=False, size=1, integer=True,
+                           expr_kind=NK_UINT8_EXPR),
+        TY_UINT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT16, signed=False, size=2, integer=True,
+                            expr_kind=NK_UINT16_EXPR),
+        TY_UINT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT32, signed=False, size=4, integer=True,
+                            expr_kind=NK_UINT32_EXPR),
+        TY_UINT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_UINT64, signed=False, size=8, integer=True,
+                            expr_kind=NK_UINT64_EXPR),
+        TY_FLOAT16: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT16, signed=True, size=2, integer=False,
+                             expr_kind=NK_FLOAT16_EXPR),
+        TY_FLOAT32: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT32, signed=True, size=4, integer=False,
+                             expr_kind=NK_FLOAT32_EXPR),
+        TY_FLOAT64: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT64, signed=True, size=8, integer=False,
+                             expr_kind=NK_FLOAT64_EXPR),
+        TY_FLOAT80: TypeNode(NK_PRIMITIVE_TYPE, name=TY_FLOAT80, signed=True, size=10, integer=False,
+                             expr_kind=NK_FLOAT80_EXPR),
     }
 
     def __init__(self, **kwargs):
@@ -324,14 +343,23 @@ class ScopeNode(ASTNode):
     def gen_name(prefix: str) -> str:
         return f"__{prefix}_{hex(random.randint(100000, 999999))[2:]}"
 
+    def declare_type(self, name: str, node: TypeNode) -> bool:
+        scope = self.find_scope(NK_MODULE_SCOPE)
+        if name in scope.types:
+            return False
+
+        if name in scope.assembly.types:
+            return False
+
+        scope.types[name] = node
+        return True
+
     def declare(self, name: str, node: DeclNode, *expected_scopes: NodeKind) -> bool:
         if name in self.locals:
             return False
 
         self.locals[name] = node
         base = self.find_scope(*expected_scopes)
-        # scopes = ", nor outside of ".join(n.name for n in expected_scopes)
-        # assert base, f"Can't declare {node.kind.name} outside of {scopes} scope."
         if not base:
             return False
         node.offset = base.offset
@@ -419,8 +447,12 @@ class Parser:
                 self.parse_decl_var(scope, stream)
 
             elif stream.is_keyword(KW_CONSTANT):
-                assertion(scope.parent is None, stream.token_loc, EK_SCOP, ERR_WRONG_DECL_SCOPE, 'Functions')
-                scope.code.append(self.parse_decl_constant(scope, stream))
+                assertion(scope.parent is None, stream.token_loc, EK_SCOP, ERR_WRONG_DECL_SCOPE, 'Constants')
+                self.parse_decl_constant(scope, stream)
+
+            elif stream.is_keyword(KW_ENUMERATION):
+                assertion(scope.parent is None, stream.token_loc, EK_SCOP, ERR_WRONG_DECL_SCOPE, 'Enumerations')
+                self.parse_decl_enumeration(scope, stream)
 
             elif stream.is_keyword(KW_FUNCTION):
                 assertion(scope.parent is None, stream.token_loc, EK_SCOP, ERR_WRONG_DECL_SCOPE, 'Functions')
@@ -619,7 +651,7 @@ class Parser:
             node: DeclNode = scope.find(token)
             assertion(node, loc, EK_DECL, ERR_UNDEFINED_NAME, token)
             if const_expr:
-                assertion(node.kind is NK_CONSTANT_DECL,
+                assertion(node.kind in (NK_CONSTANT_DECL, NK_ENUMERATION_DECL),
                           loc, EK_EXPR, ERR_NOT_CONSTEXPR, node.name)
             node.read()
             node_kind = DECL_TO_EXPR.get(node.kind)
@@ -968,7 +1000,7 @@ class Parser:
         return decl
 
     def parse_decl_constant(self, scope: ScopeNode, stream: TokenStream) -> DeclNode:
-        """Parses a function declaration.
+        """Parses a constant declaration.
 
         :param scope: the current scope being parsed.
         :param stream: the source stream of tokens.
@@ -990,6 +1022,64 @@ class Parser:
         stream.expect(TT_SEMI)
 
         return decl
+
+    def parse_decl_enumeration(self, scope: ScopeNode, stream: TokenStream) -> None:
+        """Parses a enumeration declaration.
+
+        :param scope: the current scope being parsed.
+        :param stream: the source stream of tokens.
+        :returns: the enum declaration node.
+        """
+        stream.expect_keyword(KW_ENUMERATION)
+        loc = stream.token_loc
+        name = self.parse_name(stream)
+        enum_type = TypeNode(NK_ENUMERATION_TYPE, name=name)
+
+        if stream.match(TT_COLON):
+            base_type = self.parse_type_spec(scope, stream)
+        else:
+            base_type = scope.assembly.find(TY_INT32)
+
+        assertion(base_type.kind is NK_PRIMITIVE_TYPE and enum_type.integer, loc, EK_DECL, ERR_INTEGER_ENUM, name)
+        enum_type.base = base_type
+
+        declared = scope.declare_type(name, enum_type)
+        assertion(declared, loc, EK_DECL, ERR_REDECLARED_NAME, name)
+        stream.expect(TT_LBRACE)
+        enum_type.members = self.parse_decl_enumerands(scope, enum_type, stream)
+        stream.expect(TT_RBRACE)
+
+    def parse_decl_enumerands(self, scope: ScopeNode, decl_type: TypeNode, stream: TokenStream) -> List[DeclNode]:
+        members: List[DeclNode] = []
+        counter = self.parse_decl_enumerand(scope, decl_type, 0, members, stream)
+        while stream.match(TT_COMMA):
+            counter = self.parse_decl_enumerand(scope, decl_type, counter, members, stream)
+        return members
+
+    def parse_decl_enumerand(self, scope: ScopeNode, decl_type: TypeNode, counter: int, members: List[DeclNode],
+                             stream: TokenStream) -> int:
+
+        loc = stream.token_loc
+        name: str = self.parse_name(stream)
+        decl = DeclNode(NK_ENUMERATION_DECL, name)
+        decl.type = decl_type
+        assertion(scope.declare(name, decl, NK_MODULE_SCOPE), loc, EK_DECL, ERR_REDECLARED_NAME, name)
+        if stream.match(TT_EQUAL):
+            loc = stream.token_loc
+            value: ExprNode = self.parse_expr(scope, stream, True)
+            assertion(isinstance(value.constant, int), loc, EK_TYPE, ERR_WRONG_CONSTEXPR_TYPE, 'integer')
+            value.kind = decl_type.base.expr_kind
+            value.type = decl_type
+            value.is_constexpr = True
+            value.value = str(value.constant)
+            counter = value.constant + 1
+        else:
+            value: ExprNode = ExprNode(decl_type.base.expr_kind, type=decl_type, is_constexpr=True, constant=counter,
+                                       value=str(counter))
+            counter += 1
+        decl.initializer = value
+        members.append(decl)
+        return counter
 
     def parse_decl_function(self, scope: ScopeNode, stream: TokenStream) -> DeclNode:
         """Parses a function declaration.
@@ -1298,6 +1388,8 @@ class Parser:
         base_name: str = self.parse_name(stream)
 
         type_decl = module.assembly.find(base_name)
+        if not type_decl:
+            type_decl = module.types.get(base_name)
         assertion(type_decl, loc, EK_DECL, ERR_UNDEFINED_NAME, base_name)
         return type_decl
 

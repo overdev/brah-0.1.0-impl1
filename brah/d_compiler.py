@@ -37,11 +37,12 @@ class Operand:
 
 class Constant(Operand):
 
-    def __init__(self, value: Union[int, float]):
+    def __init__(self, value: Union[int, float], **kwargs):
         super(Constant, self).__init__(value)
+        self.label = kwargs.get('named_as')
 
     def __str__(self):
-        return str(self.value)
+        return self.label if self.label else str(self.value)
 
 
 class CodeAddress(Operand):
@@ -183,17 +184,17 @@ class Instruction:
         address = "{0:04}".format(self.address)
         opcode = "{0:>4}".format(self.opcode.value)
         arg_vals = " "
-        arg_labels = " "
+        arg_labels = ""
         for arg in self.args:
             if arg.value is None:
                 raise RuntimeError()
             val = "{0:>4}".format(arg.value)
-            lbl = "{0:>4}".format(str(arg))
+            lbl = str(arg.label) if arg.label else str(arg.value)
             arg_vals = f"{arg_vals} {val}"
-            arg_labels = f"{arg_vals} {lbl}"
+            arg_labels = f"{arg_labels} {lbl}"
         arg_vals = "{0:14}".format(arg_vals)
 
-        result = f"{label}\t{address} {opcode} {arg_vals} :: {self.opcode.name} {arg_labels}"
+        result = f"{label}\t{address} {opcode} {arg_vals} :: {self.opcode.name}{arg_labels}"
         return result
 
     def find_label(self, label: str, forward: bool) -> Optional['Instruction']:
@@ -508,39 +509,41 @@ class Compiler:
         start: CodeAddress = self.get_jump(f"{stmt_node.label}")
         return instr.emit_after(JMP, start)
 
-    def compile_expr(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
+    def compile_expr(self, expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
         if expr_node.kind is NK_BINARY_EXPR:
             instr = self.compile_expr_binary(expr_node, instr)
         elif expr_node.kind is NK_UNARY_EXPR:
             instr = self.compile_expr_unary(expr_node, instr)
         elif expr_node.kind is NK_INT8_EXPR:
-            instr = self.compile_expr_i8(expr_node, instr)
+            instr = self.compile_expr_i8(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_INT16_EXPR:
-            instr = self.compile_expr_i16(expr_node, instr)
+            instr = self.compile_expr_i16(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_INT32_EXPR:
-            instr = self.compile_expr_i32(expr_node, instr)
+            instr = self.compile_expr_i32(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_INT64_EXPR:
-            instr = self.compile_expr_i64(expr_node, instr)
+            instr = self.compile_expr_i64(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_UINT8_EXPR:
-            instr = self.compile_expr_u8(expr_node, instr)
+            instr = self.compile_expr_u8(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_UINT16_EXPR:
-            instr = self.compile_expr_u16(expr_node, instr)
+            instr = self.compile_expr_u16(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_UINT32_EXPR:
-            instr = self.compile_expr_u32(expr_node, instr)
+            instr = self.compile_expr_u32(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_UINT64_EXPR:
-            instr = self.compile_expr_u64(expr_node, instr)
+            instr = self.compile_expr_u64(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_FLOAT16_EXPR:
-            instr = self.compile_expr_f16(expr_node, instr)
+            instr = self.compile_expr_f16(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_FLOAT32_EXPR:
-            instr = self.compile_expr_f32(expr_node, instr)
+            instr = self.compile_expr_f32(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_FLOAT64_EXPR:
-            instr = self.compile_expr_f64(expr_node, instr)
+            instr = self.compile_expr_f64(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_FLOAT80_EXPR:
-            instr = self.compile_expr_f80(expr_node, instr)
+            instr = self.compile_expr_f80(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_VAR_EXPR:
             instr = self.compile_expr_var(expr_node, instr)
         elif expr_node.kind is NK_CONSTANT_EXPR:
-            instr = self.compile_expr_constant(expr_node, instr)
+            instr = self.compile_expr_constant(expr_node, instr, **kwargs)
+        elif expr_node.kind is NK_ENUMERATION_EXPR:
+            instr = self.compile_expr_constant(expr_node, instr, **kwargs)
         elif expr_node.kind is NK_PARAM_EXPR:
             instr = self.compile_expr_param(expr_node, instr)
         elif expr_node.kind is NK_FCALL_EXPR:
@@ -570,59 +573,60 @@ class Compiler:
         return instr.emit_after(opcode)
 
     @staticmethod
-    def compile_expr_i8(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_SB, Constant(expr_node.constant))
+    def compile_expr_i8(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_SB, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_i16(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_SW, Constant(expr_node.constant))
+    def compile_expr_i16(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_SW, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_i32(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_SD, Constant(expr_node.constant))
+    def compile_expr_i32(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_SD, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_i64(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_SQ, Constant(expr_node.constant))
+    def compile_expr_i64(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_SQ, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_u8(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_B, Constant(expr_node.constant))
+    def compile_expr_u8(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_B, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_u16(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_W, Constant(expr_node.constant))
+    def compile_expr_u16(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_W, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_u32(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_D, Constant(expr_node.constant))
+    def compile_expr_u32(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_D, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_u64(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_Q, Constant(expr_node.constant))
+    def compile_expr_u64(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_Q, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_f16(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_FH, Constant(expr_node.constant))
+    def compile_expr_f16(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_FH, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_f32(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_FS, Constant(expr_node.constant))
+    def compile_expr_f32(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_FS, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_f64(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_FD, Constant(expr_node.constant))
+    def compile_expr_f64(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_FD, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
-    def compile_expr_f80(expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return instr.emit_after(CONST_FX, Constant(expr_node.constant))
+    def compile_expr_f80(expr_node: ExprNode, instr: Instruction, **kwargs) -> Instruction:
+        return instr.emit_after(CONST_FX, Constant(expr_node.constant, named_as=kwargs.get('name')))
 
     @staticmethod
     def compile_expr_var(expr_node: ExprNode, instr: Instruction) -> Instruction:
         return instr.emit_after(GET, StackOffset(expr_node.decl.offset))
 
     def compile_expr_constant(self, expr_node: ExprNode, instr: Instruction) -> Instruction:
-        return self.compile_expr(expr_node.decl.initializer, instr)
+        print(expr_node.kind.name, expr_node.decl.name, expr_node.decl.initializer)
+        return self.compile_expr(expr_node.decl.initializer, instr, name=expr_node.decl.name)
 
     @staticmethod
     def compile_expr_param(expr_node: ExprNode, instr: Instruction) -> Instruction:

@@ -4,6 +4,7 @@ from typing import Tuple
 __all__ = [
     'NodeKind',
     'NK_NONE',
+    'NK_BOOL_EXPR',
     'NK_INT8_EXPR',
     'NK_INT16_EXPR',
     'NK_INT32_EXPR',
@@ -22,6 +23,7 @@ __all__ = [
     'NK_FCALL_EXPR',
     'NK_VAR_EXPR',
     'NK_CONSTANT_EXPR',
+    'NK_ENUMERATION_EXPR',
     'NK_CONSTEXPR_EXPR',
     'NK_PARAM_EXPR',
     'NK_OPERAND_EXPR',
@@ -37,6 +39,7 @@ __all__ = [
     'NK_FUNCTION_DECL',
     'NK_VAR_DECL',
     'NK_CONSTANT_DECL',
+    'NK_ENUMERATION_DECL',
     'NK_PARAM_DECL',
     'NK_ASSIGN_STMT',
     'NK_INC_STMT',
@@ -97,6 +100,7 @@ __all__ = [
 class NodeKind(IntEnum):
     NONE = auto()
     INT8_EXPR = auto()
+    BOOL_EXPR = auto()
     INT16_EXPR = auto()
     INT32_EXPR = auto()
     INT64_EXPR = auto()
@@ -114,6 +118,7 @@ class NodeKind(IntEnum):
     FCALL_EXPR = auto()
     VAR_EXPR = auto()
     CONSTANT_EXPR = auto()
+    ENUMERATION_EXPR = auto()
     CONSTEXPR_EXPR = auto()
     PARAM_EXPR = auto()
     OPERAND_EXPR = auto()
@@ -129,6 +134,7 @@ class NodeKind(IntEnum):
     FUNCTION_DECL = auto()
     VAR_DECL = auto()
     CONSTANT_DECL = auto()
+    ENUMERATION_DECL = auto()
     PARAM_DECL = auto()
     ASSIGN_STMT = auto()
     INC_STMT = auto()
@@ -172,6 +178,7 @@ class NodeKind(IntEnum):
 
 NK_NONE = NodeKind.NONE
 NK_INT8_EXPR = NodeKind.INT8_EXPR
+NK_BOOL_EXPR = NodeKind.BOOL_EXPR
 NK_INT16_EXPR = NodeKind.INT16_EXPR
 NK_INT32_EXPR = NodeKind.INT32_EXPR
 NK_INT64_EXPR = NodeKind.INT64_EXPR
@@ -189,6 +196,7 @@ NK_FUNCTION_EXPR = NodeKind.FUNCTION_EXPR
 NK_FCALL_EXPR = NodeKind.FCALL_EXPR
 NK_VAR_EXPR = NodeKind.VAR_EXPR
 NK_CONSTANT_EXPR = NodeKind.CONSTANT_EXPR
+NK_ENUMERATION_EXPR = NodeKind.ENUMERATION_EXPR
 NK_CONSTEXPR_EXPR = NodeKind.CONSTEXPR_EXPR
 NK_PARAM_EXPR = NodeKind.PARAM_EXPR
 NK_OPERAND_EXPR = NodeKind.OPERAND_EXPR
@@ -204,6 +212,7 @@ NK_NAME = NodeKind.NAME
 NK_FUNCTION_DECL = NodeKind.FUNCTION_DECL
 NK_VAR_DECL = NodeKind.VAR_DECL
 NK_CONSTANT_DECL = NodeKind.CONSTANT_DECL
+NK_ENUMERATION_DECL = NodeKind.ENUMERATION_DECL
 NK_PARAM_DECL = NodeKind.PARAM_DECL
 NK_ASSIGN_STMT = NodeKind.ASSIGN_STMT
 NK_INC_STMT = NodeKind.INC_STMT
